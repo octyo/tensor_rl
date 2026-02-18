@@ -1,0 +1,12 @@
+## Log af AI anvendelse
+
+- Er tidskronologien vigtig?
+- Hvad med specielt type af AI brug som ikke blot findes i prompt dialoger?
+- Er der brug for indeksering og opdeling blandt prompt dialoger?
+
+Vores eget forslag:
+- En log MD fil til hver person
+- Samles til sidst i en stor MD fil
+
+
+## 
