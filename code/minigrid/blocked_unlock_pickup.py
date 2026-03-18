@@ -70,6 +70,14 @@ def main():
     env = SimpleEnv(render_mode="human")
 
     # enable manual control for testing
+    """
+        up arrow: move forward
+        right arrow: turn right
+        left arrow: trurn left
+        tab: pick up key
+        left shift: drop key
+        spacebar: open door with key
+    """
     manual_control = ManualControl(env, seed=42)
     manual_control.start()
 
