@@ -1,86 +1,49 @@
-from __future__ import annotations
+import minigrid
+import gymnasium as gym
+import numpy as np
+from collections import defaultdict
 
-from minigrid.core.constants import COLOR_NAMES
-from minigrid.core.grid import Grid
-from minigrid.core.mission import MissionSpace
-from minigrid.core.world_object import Door, Goal, Key, Wall
-from minigrid.manual_control import ManualControl
-from minigrid.minigrid_env import MiniGridEnv
+env = gym.make("MiniGrid-BlockedUnlockPickup-v0")
 
+# Simple Tabular Q-Learning (Reinforcement Learning) setup
+q_table = defaultdict(lambda: np.zeros(env.action_space.n))
 
-class SimpleEnv(MiniGridEnv):
-    def __init__(
-        self,
-        size=10,
-        agent_start_pos=(1, 1),
-        agent_start_dir=0,
-        max_steps: int | None = None,
-        **kwargs,
-    ):
-        self.agent_start_pos = agent_start_pos
-        self.agent_start_dir = agent_start_dir
+learning_rate = 0.1
+discount_factor = 0.99
+epsilon = 0.1
 
-        mission_space = MissionSpace(mission_func=self._gen_mission)
+def get_state(obs):
+    # MiniGrid observations are dicts. We extract 'image' and make it a hashable tuple.
+    return tuple(obs["image"].flatten())
 
-        if max_steps is None:
-            max_steps = 4 * size**2
-
-        super().__init__(
-            mission_space=mission_space,
-            grid_size=size,
-            # Set this to True for maximum speed
-            see_through_walls=True,
-            max_steps=max_steps,
-            **kwargs,
-        )
-
-    @staticmethod
-    def _gen_mission():
-        return "grand mission"
-
-    def _gen_grid(self, width, height):
-        # Create an empty grid
-        self.grid = Grid(width, height)
-
-        # Generate the surrounding walls
-        self.grid.wall_rect(0, 0, width, height)
-
-        # Generate vertical separation wall
-        for i in range(0, height):
-            self.grid.set(5, i, Wall())
-        
-        # Place the door and key
-        self.grid.set(5, 6, Door(COLOR_NAMES[0], is_locked=True))
-        self.grid.set(3, 6, Key(COLOR_NAMES[0]))
-
-        # Place a goal square in the bottom-right corner
-        self.put_obj(Goal(), width - 2, height - 2)
-
-        # Place the agent
-        if self.agent_start_pos is not None:
-            self.agent_pos = self.agent_start_pos
-            self.agent_dir = self.agent_start_dir
-        else:
-            self.place_agent()
-
-        self.mission = "grand mission"
-
-
-def main():
-    env = SimpleEnv(render_mode="human")
-
-    # enable manual control for testing
-    """
-        up arrow: move forward
-        right arrow: turn right
-        left arrow: trurn left
-        tab: pick up key
-        left shift: drop key
-        spacebar: open door with key
-    """
-    manual_control = ManualControl(env, seed=42)
-    manual_control.start()
-
+# Training loop following standard Gymnasium syntax
+for episode in range(500):
+    obs, info = env.reset()
+    state = get_state(obs)
     
-if __name__ == "__main__":
-    main()
+    terminated, truncated = False, False
+    
+    while not (terminated or truncated):
+        # Epsilon-greedy action selection
+        if np.random.uniform(0, 1) < epsilon:
+            action = env.action_space.sample()  # Explore
+        else:
+            action = np.argmax(q_table[state])  # Exploit
+            
+        # Standard Gymnasium step
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        next_state = get_state(next_obs)
+        
+        # Q-learning update step
+        old_value = q_table[state][action]
+        next_max = np.max(q_table[next_state])
+        
+        # Q(s,a) = Q(s,a) + alpha * (R + gamma * max Q(s',a') - Q(s,a))
+        new_value = old_value + learning_rate * (reward + discount_factor * next_max - old_value)
+        q_table[state][action] = new_value
+        
+        # Update current state
+        state = next_state
+
+env.close()
+print("Simple Q-Learning finished running over the environment.")
