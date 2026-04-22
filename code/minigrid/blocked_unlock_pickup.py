@@ -1,8 +1,12 @@
-import numpy as np
+import pickle
 from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
 from boilerplate_test import SimpleEnv
 
 env = SimpleEnv()
+MODEL_PATH = Path(__file__).with_name("blocked_unlock_pickup_q_table.pkl")
 
 # Use a subset of useful MiniGrid actions: left, right, forward, pickup, toggle
 # (drop/done are excluded to reduce useless exploration)
@@ -113,6 +117,22 @@ def evaluate_policy(env, q_table, n_episodes=10):
         "mean_steps": float(np.mean(steps_list)),
     }
 
+def save_q_table(q_table, path):
+    serializable_q_table = {
+        state: np.asarray(action_values, dtype=np.float32)
+        for state, action_values in q_table.items()
+    }
+
+    with path.open("wb") as file:
+        pickle.dump(serializable_q_table, file)
+
+
+def load_q_table(path):
+    with path.open("rb") as file:
+        loaded_q_table = pickle.load(file)
+
+    return defaultdict(lambda: np.zeros(NUM_ACTIONS, dtype=np.float32), loaded_q_table)
+
 # Training loop following standard Gymnasium syntax
 train_returns = []
 train_successes = []
@@ -146,6 +166,9 @@ print(
     f"success_rate={final_eval['success_rate']:.2%}, "
     f"mean_steps={final_eval['mean_steps']:.1f}"
 )
+
+save_q_table(q_table, MODEL_PATH)
+print(f"Saved trained Q-table to {MODEL_PATH}")
 
 env.close()
 

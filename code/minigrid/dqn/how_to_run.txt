@@ -1,0 +1,8 @@
+How to run now:
+
+From minigrid folder:
+python -m dqn.run_dqn
+Evaluate:
+python -m dqn.evaluate_dqn --episodes 5
+Evaluate with rendering:
+python -m dqn.evaluate_dqn --episodes 3 --render
