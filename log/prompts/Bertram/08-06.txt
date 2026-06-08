@@ -1,0 +1,105 @@
+User:
+I have a standard DQN and a CP-based DQN variant in my codebase. Right now, the standard DQN performs better.
+Without making major changes to my implementation, help me identify what I should investigate to understand this gap.
+Specifically:
+
+What aspects of my CP decomposition (e.g., rank, initialization, optimization, expressivity) should I examine?
+What common pitfalls cause tensor-network-based models to underperform in DQN?
+Are there signs in training behavior (loss, Q-values, stability) I should look for?
+
+Keep the suggestions practical and focused on debugging and analysis rather than redesigning the model.
+
+Claude:
+Optimized tool selectionI’m locating the standard DQN and CP-based variant so I can anchor the advice in your actual implementation, then I’ll point to the most likely failure modes and the training signals that separate them.
+
+Searched for regex `class .*DQN|cp|CP|tensor train|decomposition|rank` (`**/code/**`), 50 results
+
+Searched for files matching `**/code/rl_course/ex13/**/*.py`, 11 matches
+
+Searched for files matching `**/sim/**/*.py`, 8 matches
+
+I found the two likely implementation surfaces: the DQN agent/network in sim and the tensor-network layers there. Next I’m checking whether the CP model is constrained differently at the layer level or in training hyperparameters, because that usually explains a gap without needing a redesign.
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/models/q_networks.py)
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/models/tensor_layers.py)
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/agents/dqn_agent.py)
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/train.py)
+
+The CP layer is implemented as a low-rank factorization of each dense layer, not as a full tensor decomposition of a higher-order weight tensor. That narrows the likely gap to capacity, initialization, and optimization dynamics rather than a fundamental bug in the DQN loop, so I’m checking what you already log to suggest concrete diagnostics.
+
+Searched for regex `loss|q_values|target_q|td_error|gradient|entropy` (`**/sim/**/*.py`), 12 results
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/utils/logging_utils.py)
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/code/rl_course/ex13/dqn_network.py)
+
+I have enough to diagnose the most likely causes from the code path itself. I’m doing one quick check for whether your current logging already captures anything beyond episode reward, because if not, that’s the first gap to close before changing the model.
+
+Searched for files matching `**/sim/data/*.json`, 2 matches
+
+Searched for files matching `**/sim/data/**`, 2 matches
+
+Searched for regex `wandb.log|Logger\(|loss.item\(|q_values|target_q_values` (`**/sim/**/*.py`), 11 results
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_cp_rank4_seed42.json#1-1), lines 1 to 80
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_standard_rank4_seed42.json#1-1), lines 1 to 80
+
+The existing logs only track episode reward, length, and time. That means you currently cannot tell whether the CP model is failing because of poor optimization, under-capacity, or unstable Q estimates, so the key recommendation will be to instrument a few internal signals before touching architecture.
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_standard_rank4_seed42.json#1-1), lines 1 to 260
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_cp_rank4_seed42.json#1-1), lines 1 to 260
+
+I confirmed the saved runs only contain episode reward/length, but the reward traces already show enough to say the CP variant is noisier and less consistently improving. I’m checking the tail of those runs so I can speak concretely about whether the issue looks like underfitting, instability, or just slower convergence.
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_standard_rank4_seed42.json#260-260), lines 260 to 410
+
+Read [](file:///c%3A/Users/Bruger/OneDrive%20-%20Danmarks%20Tekniske%20Universitet/Semester%204/02466-Project_Work/tensor_rl/tensor_rl/sim/sim/data/MiniGrid-Empty-5x5-v0_dqn_cp_rank4_seed42.json#260-260), lines 260 to 410
+
+The first thing I would investigate is whether the CP model is simply too constrained for the layers you are compressing. In tensor_layers.py, your CP layer is a low-rank factorization of each dense matrix, and in q_networks.py you use the same `rank` for both hidden layers and the final action head. With `hidden_sizes=(128, 128)` and `rank=4`, the effective rank bottleneck is very strong, so the CP model may be underfitting even if the DQN loop is fine.
+
+The second area is optimization, not architecture. Factorized layers often train worse than dense layers even when they are mathematically valid, because the factors are scale-indeterminate and can become ill-conditioned. I would inspect:
+- the norm of each factor matrix separately
+- the effective weight matrix rank or singular values during training
+- whether one factor grows while the other shrinks
+- sensitivity to the same Adam learning rate used for the dense model
+
+Also check initialization. Your CP factors use the same uniform scheme as a normal linear layer. That is usually not a neutral choice for a product of factors, because the product changes the effective variance of the layer. A CP model can look “dead” early if its initial effective weights are too small, or unstable if they are too large.
+
+A very practical issue in your current setup is observability. The logger in logging_utils.py only stores episode reward, length, and time, and train.py does not record the `loss` returned by `DQNAgent.update()` from dqn_agent.py. That means you currently cannot tell whether the CP model is failing because of:
+- slow optimization
+- unstable TD targets
+- under-capacity
+- or simply slower convergence
+
+For debugging, I would add temporary logging for:
+- TD loss
+- mean and max Q-values
+- mean target Q-values
+- TD-error histogram or at least mean absolute TD error
+- gradient norms for the CP factors
+- action entropy or action frequency
+
+When you look at training behavior, these patterns are the most informative:
+- Loss decreases, reward does not: likely undercapacity or poor representation
+- Loss is noisy or spikes repeatedly: likely optimization instability from the factorized parameterization
+- Q-values collapse to a narrow range: likely too much compression or vanishing effective weights
+- Q-values explode while reward stays flat: likely bootstrapping instability
+- One action dominates too early: possibly bad initialization or overconfident value estimates
+- Standard DQN learns faster on the same number of environment steps: maybe the CP model needs more steps before it can compete, so compare by steps, not only by episode count
+
+Common pitfalls for tensor-network-style DQNs are:
+- rank too low for the hidden widths
+- applying the same rank to every layer, especially the output layer
+- using a dense-model learning rate unchanged
+- flattening observations so the tensor structure gives no real inductive benefit
+- expecting compression to help when the task is already small enough for a normal MLP
+- evaluating only reward curves and not the internal Q/TD statistics
+
+So the shortest debugging path is: compare parameter counts, sweep rank, log loss/Q-statistics, and inspect factor norms and singular values. That will tell you whether the gap is mainly capacity, initialization, or optimization.
+
+If you want, I can help you add a minimal set of logging hooks for loss, Q-values, and gradient norms without changing the model design.
