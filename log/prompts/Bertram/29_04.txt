@@ -1,0 +1,416 @@
+User:
+
+I'm training a Deep Q-Network (DQN) on the MiniGrid BlockedUnlockPickup environment, but my evaluation results show zero reward and no successful episodes (all episodes terminate at the max step limit).
+
+My current setup is a baseline DQN with:
+
+Feedforward Q-network
+One-step TD learning
+Experience replay
+Hard target network updates
+Epsilon-greedy exploration
+
+Example evaluation output:
+
+Episode 01/5: return=0.000, solved=False, steps=400
+...
+Summary:
+mean_return=0.000
+success_rate=0.00%
+
+Instead of giving a direct solution, can you help me debug and improve this step by step?
+
+Specifically:
+
+What are the most common failure modes in this type of sparse-reward environment?
+What diagnostics or checks should I run to verify whether learning is happening at all?
+How can I systematically test whether the issue is exploration, reward sparsity, or implementation bugs?
+At what point does it make sense to try extensions like Double DQN, and why?
+
+I’m looking for guidance on how to think about and investigate the problem rather than a full implementation.
+
+Copilot:
+
+Great — you’re approaching this exactly the right way. Sparse-reward MiniGrid tasks like BlockedUnlockPickup are notorious for making vanilla DQN look “broken” even when the implementation is mostly correct. Let’s break this into a structured debugging workflow so you can isolate the failure mode rather than guessing. 
+
+ 
+
+1) Common failure modes in sparse-reward MiniGrid 
+
+Think of these in three buckets: 
+
+A. Exploration failure (most common) 
+
+BlockedUnlockPickup requires a long sequence of correct actions: 
+
+Find key → unlock door → navigate → pick up object 
+
+With ε-greedy: 
+
+Probability of random success is extremely low 
+
+You often get zero reward trajectories for thousands of episodes 
+
+Symptoms: 
+
+Replay buffer contains mostly zero rewards 
+
+Q-values stay near zero 
+
+No improvement in success rate 
+
+ 
+
+B. Representation / observation issues 
+
+MiniGrid observations can be tricky: 
+
+Partial observability 
+
+Symbolic grid encoding (object, color, state) 
+
+Agent direction matters 
+
+Common problems: 
+
+Incorrect preprocessing (e.g., flattening without preserving structure) 
+
+Losing directional info 
+
+Not normalizing inputs 
+
+Symptoms: 
+
+Network outputs identical Q-values regardless of state 
+
+Training loss does not decrease meaningfully 
+
+ 
+
+C. Bootstrapping / DQN instability 
+
+Classic DQN issues: 
+
+Overestimation bias 
+
+Q-values diverge or collapse 
+
+Target network updates too infrequent/frequent 
+
+Symptoms: 
+
+Exploding Q-values 
+
+Loss spikes 
+
+Policy becomes deterministic but wrong 
+
+ 
+
+D. Implementation bugs (always suspect this early) 
+
+Typical bugs: 
+
+Incorrect done handling (done vs truncated) 
+
+Reward overwritten or never recorded 
+
+Wrong action indexing 
+
+Target calculation wrong 
+
+Symptoms: 
+
+Learning appears completely flat 
+
+No difference between random policy and trained agent 
+
+ 
+
+2) Diagnostics: Is learning happening at all? 
+
+You want quick signals, not just final reward. 
+
+A. Check Q-values evolution 
+
+Log: 
+
+1     mean_q = q_values.mean() 
+
+2     max_q = q_values.max() 
+
+What to expect: 
+
+Early: near 0 
+
+Later: should increase gradually 
+
+If always ~0 → no learning signal 
+
+ 
+
+B. Track TD loss 
+
+Plot loss over time: 
+
+Should decrease initially 
+
+Then stabilize 
+
+If: 
+
+Flat → no gradient signal 
+
+Exploding → instability 
+
+ 
+
+C. Inspect replay buffer 
+
+Sample transitions and print: 
+
+1     print(reward distribution) 
+
+2     print(done ratio) 
+
+If: 
+
+99.9% rewards == 0 → exploration likely failing 
+
+No terminal states → episode handling bug 
+
+ 
+
+D. Overfit test (VERY powerful) 
+
+Take a tiny environment: 
+
+Fix seed 
+
+Train on one episode only 
+
+Goal: → DQN should memorize and solve it 
+
+If it can’t overfit, you have an implementation bug. 
+
+ 
+
+E. Random policy baseline 
+
+Run: 
+
+Pure random agent 
+
+Compare: 
+
+Does trained agent outperform random? 
+
+If not → learning not happening 
+
+ 
+
+3) Is it exploration, sparsity, or a bug? 
+
+Use controlled experiments: 
+
+ 
+
+Test 1: Reward shaping (diagnostic, not final solution) 
+
+Add temporary rewards: 
+
++0.1 for picking up key 
+
++0.1 for opening door 
+
+If learning suddenly works: → problem = reward sparsity / exploration 
+
+ 
+
+Test 2: Increase epsilon dramatically 
+
+Try: 
+
+1     epsilon_start = 1.0 
+
+2     epsilon_end = 0.1 
+
+3     decay very slow 
+
+If performance improves: → exploration bottleneck 
+
+ 
+
+Test 3: Shorten the task 
+
+Modify environment: 
+
+Smaller grid 
+
+Remove blocking object 
+
+Pre-open the door 
+
+If agent learns: → pipeline works, but original task too hard 
+
+ 
+
+Test 4: Disable bootstrapping 
+
+Train with: 
+
+1     target = reward  # no gamma * max(Q) 
+
+If behavior changes: → possible bug in TD target computation 
+
+ 
+
+Test 5: Deterministic transitions 
+
+Fix seeds and: 
+
+Run same episode multiple times 
+
+If different trajectories: → nondeterminism or state handling issue 
+
+ 
+
+4) Specific MiniGrid pitfalls 
+
+Watch for these: 
+
+✅ Done vs truncated 
+
+Gymnasium splits: 
+
+1     terminated, truncated 
+
+You should treat: 
+
+1     done = terminated OR truncated 
+
+But for TD: 
+
+1     target = r + gamma * max(Q') * (not terminated) 
+
+If you treat truncated as terminal incorrectly → learning breaks 
+
+ 
+
+✅ Action space mismatch 
+
+MiniGrid actions: 
+
+turn left/right 
+
+move forward 
+
+pickup 
+
+toggle 
+
+If indexing is off → agent never executes correct sequence 
+
+ 
+
+✅ Observation encoding 
+
+Verify: 
+
+Correct shape 
+
+Values meaningful (not constant) 
+
+ 
+
+5) When to try improvements like Double DQN 
+
+Only after baseline is confirmed working. 
+
+Add Double DQN when: 
+
+You observe: 
+
+Q-values growing unrealistically large 
+
+Policy oscillates 
+
+Training unstable 
+
+Why it helps: 
+
+Reduces overestimation bias: 
+
+1     argmax_a Q_online(s', a) 
+
+2     Q_target(s', argmax_a Q_online) 
+
+Instead of: 
+
+1     max_a Q_target(s', a) 
+
+ 
+
+But important: 
+
+Double DQN will NOT fix: 
+
+No exploration 
+
+Sparse reward 
+
+Broken pipeline 
+
+It only improves stability once learning signal exists. 
+
+ 
+
+6) Suggested debugging order (very practical) 
+
+Follow this exact sequence: 
+
+✅ Overfit single episode 
+
+✅ Check replay buffer rewards 
+
+✅ Plot Q-values + loss 
+
+✅ Compare with random agent 
+
+✅ Add temporary reward shaping 
+
+✅ Increase exploration (epsilon) 
+
+✅ Simplify environment 
+
+✅ Verify done/terminated handling 
+
+✅ Only then try Double DQN 
+
+ 
+
+7) Mental model to guide you 
+
+Ask at each step: 
+
+"Is the agent getting any meaningful signal?" 
+
+No reward → exploration problem 
+
+Reward but no learning → implementation bug 
+
+Learning but unstable → algorithm limitation 
+
+ 
+
+If you want next step 
+
+We can go deeper by: 
+
+Inspecting your TD update 
+
+Looking at your replay sampling 
+
+Or analyzing your training curves 
+
+Just share logs or code snippets 👍 

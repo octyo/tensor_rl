@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from ..boilerplate_test import SimpleEnv
+from boilerplate_test import SimpleEnv
 from .dqn_agent import DQNAgent
 from .run_dqn import CHECKPOINT_PATH, FlattenedActionSubsetEnv
 

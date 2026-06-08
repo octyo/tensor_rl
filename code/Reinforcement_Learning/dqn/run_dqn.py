@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import argparse
+import random
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import torch
 
-from ..boilerplate_test import SimpleEnv
+from boilerplate_test import SimpleEnv
 from .dqn_agent import DQNAgent, train_dqn
 
 
@@ -48,7 +50,37 @@ class FlattenedActionSubsetEnv:
         return self.env.close()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train DQN on SimpleEnv.")
+    parser.add_argument("--episodes", type=int, default=500, help="Number of training episodes.")
+    parser.add_argument("--max-steps", type=int, default=1_000, help="Max steps per episode.")
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed for reproducibility.")
+    parser.add_argument(
+        "--overfit-one-episode",
+        action="store_true",
+        help="Deterministic overfit debug mode: train on one fixed-seed episode only.",
+    )
+    return parser.parse_args()
+
+
+def set_global_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 def main() -> None:
+    args = parse_args()
+
+    if args.seed is not None:
+        set_global_seed(args.seed)
+
     env = FlattenedActionSubsetEnv(SimpleEnv())
     state_dim = env.reset().shape[0]
     action_dim = env.action_space.n
@@ -67,8 +99,24 @@ def main() -> None:
         target_update_interval=500,
     )
 
-    print("Training DQN on SimpleEnv for 500 episodes...")
-    returns = train_dqn(env, agent, num_episodes=500, max_steps_per_episode=1_000)
+    num_episodes = 1 if args.overfit_one_episode else args.episodes
+    fixed_seed_per_episode = bool(args.overfit_one_episode and args.seed is not None)
+
+    if args.overfit_one_episode:
+        if args.seed is None:
+            print("Overfit mode enabled without --seed; run remains stochastic.")
+        else:
+            print(f"Overfit mode enabled: training on one deterministic episode with seed={args.seed}.")
+
+    print(f"Training DQN on SimpleEnv for {num_episodes} episodes...")
+    returns = train_dqn(
+        env,
+        agent,
+        num_episodes=num_episodes,
+        max_steps_per_episode=args.max_steps,
+        initial_seed=args.seed,
+        fixed_seed_per_episode=fixed_seed_per_episode,
+    )
 
     torch.save(
         {
