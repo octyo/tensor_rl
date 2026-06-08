@@ -297,11 +297,18 @@ class DQNAgent:
         return np.asarray(next_state, dtype=np.float32), float(reward), bool(done), info
 
 
-def reset_env(env) -> np.ndarray:
+def reset_env(env, seed: Optional[int] = None) -> np.ndarray:
     """
     Reset helper compatible with Gym and Gymnasium reset signatures.
     """
-    reset_out = env.reset()
+    if seed is None:
+        reset_out = env.reset()
+    else:
+        try:
+            reset_out = env.reset(seed=seed)
+        except TypeError:
+            reset_out = env.reset()
+
     if isinstance(reset_out, tuple):
         state, _ = reset_out
     else:
@@ -314,6 +321,8 @@ def train_dqn(
     agent: DQNAgent,
     num_episodes: int,
     max_steps_per_episode: int = 1_000,
+    initial_seed: Optional[int] = None,
+    fixed_seed_per_episode: bool = False,
 ) -> List[float]:
     """
     Simple training loop.
@@ -323,8 +332,15 @@ def train_dqn(
     """
     returns: List[float] = []
 
-    for _ in range(num_episodes):
-        state = reset_env(env)
+    for episode_idx in range(num_episodes):
+        if initial_seed is None:
+            episode_seed = None
+        elif fixed_seed_per_episode:
+            episode_seed = initial_seed
+        else:
+            episode_seed = initial_seed + episode_idx
+
+        state = reset_env(env, seed=episode_seed)
         episode_return = 0.0
 
         for _ in range(max_steps_per_episode):
