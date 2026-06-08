@@ -50,6 +50,8 @@ class DQNAgent:
         self.target_update_interval = target_update_interval
 
         self.train_steps = 0
+        self.last_mean_q = 0.0
+        self.last_grad_norm = 0.0
 
     def epsilon(self) -> float:
         progress = min(1.0, self.train_steps / self.epsilon_decay_steps)
@@ -67,8 +69,9 @@ class DQNAgent:
             return self.q_network(state_t).argmax(dim=1).item()
 
     def update(self):
+        """Returns (loss, mean_max_q, grad_norm). Returns (0, 0, 0) if buffer not ready."""
         if len(self.replay_buffer) < self.replay_min_size:
-            return 0.0
+            return 0.0, 0.0, 0.0
 
         states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
 
@@ -83,11 +86,14 @@ class DQNAgent:
         with torch.no_grad():
             max_next_q = self.target_network(next_states_t).max(1, keepdim=True)[0]
             target_q_values = rewards_t + (1 - dones_t) * self.gamma * max_next_q
+            self.last_mean_q = self.q_network(states_t).max(dim=1)[0].mean().item()
 
         loss = nn.MSELoss()(q_values, target_q_values)
 
         self.optimizer.zero_grad()
         loss.backward()
+        self.last_grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.q_network.parameters(), max_norm=10.0).item()
         self.optimizer.step()
 
         self.train_steps += 1
@@ -95,4 +101,4 @@ class DQNAgent:
         if self.train_steps % self.target_update_interval == 0:
             self.target_network.load_state_dict(self.q_network.state_dict())
 
-        return loss.item()
+        return loss.item(), self.last_mean_q, self.last_grad_norm

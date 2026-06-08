@@ -10,6 +10,7 @@ from config import LR, GAMMA, BUFFER_SIZE, BATCH_SIZE, REPLAY_MIN_SIZE, EPSILON_
 class DoubleDQNAgent(DQNAgent):
     """Double DQN: online network selects next action, target network evaluates it.
     Uses Polyak (soft) target updates instead of hard copies.
+    Returns (loss, mean_max_q, grad_norm) from update().
     """
 
     def __init__(self, q_network: nn.Module, action_dim: int, lr=LR, gamma=GAMMA,
@@ -38,8 +39,9 @@ class DoubleDQNAgent(DQNAgent):
             target_p.data.copy_(target_p.data + self.tau * (online_p.data - target_p.data))
 
     def update(self):
+        """Returns (loss, mean_max_q, grad_norm). Returns (0, 0, 0) if buffer not ready."""
         if len(self.replay_buffer) < self.replay_min_size:
-            return 0.0
+            return 0.0, 0.0, 0.0
 
         states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
 
@@ -56,14 +58,17 @@ class DoubleDQNAgent(DQNAgent):
             next_actions = self.q_network(next_states_t).argmax(dim=1, keepdim=True)
             next_q = self.target_network(next_states_t).gather(1, next_actions)
             target_q_values = rewards_t + (1 - dones_t) * self.gamma * next_q
+            self.last_mean_q = self.q_network(states_t).max(dim=1)[0].mean().item()
 
         loss = nn.SmoothL1Loss()(q_values, target_q_values)
 
         self.optimizer.zero_grad()
         loss.backward()
+        self.last_grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.q_network.parameters(), max_norm=10.0).item()
         self.optimizer.step()
 
         self._soft_update()
         self.train_steps += 1
 
-        return loss.item()
+        return loss.item(), self.last_mean_q, self.last_grad_norm
