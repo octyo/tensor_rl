@@ -10,7 +10,7 @@ from utils.logging_utils import Logger, calculate_bitsize
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default="CartPole-v1")
+    parser.add_argument("--env", type=str, default="MiniGrid-Empty-5x5-v0") # CartPole-v1
     parser.add_argument("--algo", type=str, default="dqn")
     parser.add_argument("--network", type=str, default="standard", choices=["standard", "cp", "tucker", "tt"])
     parser.add_argument("--rank", type=int, default=4)
@@ -25,7 +25,6 @@ def main():
     
     # 1. Environment Wrapper (Flattens images and shapes)
     env = make_env(args.env)
-    env.seed(args.seed)
     env.action_space.seed(args.seed)
     
     state_dim = env.observation_space.shape[0] if len(env.observation_space.shape) > 0 else 1
@@ -51,14 +50,15 @@ def main():
     # 5. Core Training Loop
     total_steps = 0
     for episode in range(1, args.episodes + 1):
-        state = env.reset()
+        state, info = env.reset(seed=args.seed + episode)
         done = False
         episodic_reward = 0
         steps = 0
         
         while not done:
             action = agent.select_action(state)
-            next_state, reward, done, info = env.step(action)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
             
             agent.replay_buffer.push(state, action, reward, next_state, float(done))
             agent.update()

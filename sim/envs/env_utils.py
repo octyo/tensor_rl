@@ -1,6 +1,7 @@
-import gym
+import gymnasium as gym
 import numpy as np
-from gym.wrappers import FlattenObservation
+from gymnasium.wrappers import FlattenObservation
+import minigrid
 
 def make_env(env_id: str):
     """
@@ -10,6 +11,10 @@ def make_env(env_id: str):
     # If using Minigrid, we might need gym-minigrid wrappers, 
     # but for gym > 0.26 or gymnasium, FlattenObservation usually works.
     env = gym.make(env_id)
+    
+    if "MiniGrid" in env_id:
+        from minigrid.wrappers import ImgObsWrapper
+        env = ImgObsWrapper(env)
     
     # We want flat 1D inputs for our Linear and Tensor layers
     env = FlattenObservation(env)
