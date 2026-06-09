@@ -31,6 +31,7 @@ class DoubleDQNAgent(DQNAgent):
         if not evaluate and random.random() < self.epsilon():
             return random.randint(0, self.action_dim - 1)
         with torch.no_grad():
+            # unsqueeze(0) is shape-agnostic: works for flat (147,) and structured (7,7,3).
             state_t = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
             return self.q_network(state_t).argmax(dim=1).item()
 

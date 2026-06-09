@@ -3,8 +3,8 @@ import json
 import os
 import numpy as np
 
-from envs.env_utils import make_env
-from models.q_networks import QNetwork, DuelingQNetwork
+from envs.env_utils import make_env, make_env_structured
+from models.q_networks import QNetwork, DuelingQNetwork, StructuredQNetwork
 from agents.dqn_agent import DQNAgent
 from agents.double_dqn_agent import DoubleDQNAgent
 from agents.dueling_dqn_agent import DuelingDQNAgent
@@ -14,6 +14,7 @@ from config import (DEFAULT_ENV, DEFAULT_SEED, DEFAULT_EPISODES, DEFAULT_NETWORK
 
 DEEP_ALGOS = {"dqn", "double_dqn", "dueling_dqn"}
 TABULAR_ALGOS = {"tabular_q", "sarsa"}
+STRUCTURED_NETWORKS = {"tt", "cp"}
 
 
 def parse_args():
@@ -28,7 +29,13 @@ def parse_args():
                         help=("Which layers to tensorize. 'all' (default), 'none', or "
                               "comma-separated 0-based indices e.g. '0,2'. "
                               "Indices: 0=first hidden, 1=second hidden, ..., N=output layer. "
-                              "For dueling networks, indices refer to trunk hidden layers only."))
+                              "For dueling networks, indices refer to trunk hidden layers only. "
+                              "Ignored when --structured is set."))
+    parser.add_argument("--structured", action="store_true",
+                        help=("Use StructuredQNetwork with a TTEmbedding or CPEmbedding first "
+                              "layer that preserves the (7,7,3) MiniGrid observation as a "
+                              "genuine 3-mode tensor instead of flattening it. "
+                              "Requires a MiniGrid env and --network tt or cp."))
     parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
     parser.add_argument("--tau", type=float, default=TAU,
                         help="Polyak update rate for Double/Dueling DQN target network")
@@ -38,10 +45,52 @@ def parse_args():
     return parser.parse_args()
 
 
-def make_agent(algo: str, state_dim: int, action_dim: int, args):
-    """Factory: returns (q_net, agent) for the chosen algo."""
+def validate_structured_args(args):
+    """Raise a clear error if --structured is used with incompatible arguments."""
+    if not args.structured:
+        return
+    if "MiniGrid" not in args.env:
+        raise ValueError(
+            "--structured requires a MiniGrid environment (e.g. MiniGrid-Empty-5x5-v0). "
+            f"Got: {args.env}"
+        )
+    if args.network not in STRUCTURED_NETWORKS:
+        raise ValueError(
+            f"--structured only supports --network tt or cp (got '{args.network}'). "
+            "Tucker and standard linear are not applicable to the embedding approach."
+        )
+
+
+def make_agent(algo: str, action_dim: int, args, state_dim: int = None, mode_dims: tuple = None):
+    """Factory: returns (q_net, agent).
+
+    For the flat path, state_dim must be provided.
+    For the structured path (args.structured=True), mode_dims must be provided.
+    """
     tz = args.tensorize_layers
 
+    if args.structured:
+        # StructuredQNetwork: genuine multi-mode TN embedding, then standard hidden layers.
+        # hidden_size is taken from the first element of HIDDEN_SIZES.
+        q_net = StructuredQNetwork(
+            mode_dims=mode_dims,
+            action_dim=action_dim,
+            hidden_size=HIDDEN_SIZES[0],
+            embedding_type=args.network,
+            rank=args.rank,
+        )
+        if algo == "dqn":
+            return q_net, DQNAgent(q_net, epsilon_decay_steps=(args.episodes * 100))
+        elif algo == "double_dqn":
+            agent = DoubleDQNAgent(q_net, action_dim=action_dim,
+                                   epsilon_decay_steps=(args.episodes * 100), tau=args.tau)
+            return q_net, agent
+        elif algo == "dueling_dqn":
+            agent = DuelingDQNAgent(q_net, action_dim=action_dim,
+                                    epsilon_decay_steps=(args.episodes * 100), tau=args.tau)
+            return q_net, agent
+
+    # --- Flat path ---
     if algo == "dqn":
         q_net = QNetwork(state_dim, action_dim, hidden_sizes=HIDDEN_SIZES,
                          network_type=args.network, rank=args.rank, tensorize_layers=tz)
@@ -86,15 +135,21 @@ def evaluate(env, agent, seed, n_episodes=5) -> float:
     return float(np.mean(rewards))
 
 
-def run_one_seed(env, args, seed, run_name) -> dict:
+def run_one_seed(env, args, seed, run_name, mode_dims=None) -> dict:
     """Train for one seed. Returns the metrics dict."""
-    state_dim = env.observation_space.shape[0] if len(env.observation_space.shape) > 0 else 1
     action_dim = env.action_space.n
     env.action_space.seed(seed)
 
-    q_net, agent = make_agent(args.algo, state_dim, action_dim, args)
+    if args.structured:
+        q_net, agent = make_agent(args.algo, action_dim, args, mode_dims=mode_dims)
+    else:
+        obs_shape = env.observation_space.shape
+        state_dim = obs_shape[0] if len(obs_shape) > 0 else 1
+        q_net, agent = make_agent(args.algo, action_dim, args, state_dim=state_dim)
+
     bitsize, total_bytes = calculate_bitsize(q_net)
-    print(f"  [{args.network}/layers:{args.tensorize_layers}] {bitsize} params (~{total_bytes/1024:.2f} KB)")
+    label = f"structured/{args.network}" if args.structured else f"{args.network}/layers:{args.tensorize_layers}"
+    print(f"  [{label}] {bitsize} params (~{total_bytes/1024:.2f} KB)")
 
     logger = Logger(use_wandb=args.wandb, project="tensor-rl", run_name=run_name)
 
@@ -113,7 +168,7 @@ def run_one_seed(env, args, seed, run_name) -> dict:
             agent.replay_buffer.push(state, action, reward, next_state, float(done))
             loss, mean_q, grad_norm = agent.update()
 
-            if loss > 0:  # only count steps where an actual update happened
+            if loss > 0:
                 ep_losses.append(loss)
                 ep_qs.append(mean_q)
                 ep_gnorms.append(grad_norm)
@@ -161,29 +216,37 @@ def aggregate_seeds(all_metrics: list, run_base: str):
 
 
 def build_run_name(args, seed: int) -> str:
+    if args.structured:
+        return f"{args.env}_{args.algo}_{args.network}_rank{args.rank}_struct_seed{seed}"
     tz_spec = args.tensorize_layers
-    # Encode non-default tensorize specs in the run name (replace commas to avoid shell issues)
     tz = f"_tz{tz_spec.replace(',', '-')}" if tz_spec != "all" else ""
     return f"{args.env}_{args.algo}_{args.network}_rank{args.rank}{tz}_seed{seed}"
 
 
 def main():
     args = parse_args()
+    validate_structured_args(args)
     seeds = [int(s.strip()) for s in args.seeds.split(",")]
 
+    mode = "structured" if args.structured else f"tensorize_layers={args.tensorize_layers}"
     print(f"Setting up [{args.algo}] on [{args.env}] | network=[{args.network}] "
-          f"rank={args.rank} tensorize_layers={args.tensorize_layers} | seeds={seeds}")
+          f"rank={args.rank} {mode} | seeds={seeds}")
 
     if args.algo not in DEEP_ALGOS:
         raise ValueError("Tabular algos not supported via train.py — use agents directly.")
 
-    env = make_env(args.env)
-    all_metrics = []
+    if args.structured:
+        env, mode_dims = make_env_structured(args.env)
+        print(f"  Structured input shape: {mode_dims}")
+    else:
+        env = make_env(args.env)
+        mode_dims = None
 
+    all_metrics = []
     for seed in seeds:
         run_name = build_run_name(args, seed)
         print(f"\n=== Seed {seed} | run: {run_name} ===")
-        metrics = run_one_seed(env, args, seed, run_name)
+        metrics = run_one_seed(env, args, seed, run_name, mode_dims=mode_dims)
         all_metrics.append(metrics)
 
     if len(seeds) > 1:

@@ -59,12 +59,19 @@ class DQNAgent:
 
     def select_action(self, state: np.ndarray, evaluate: bool = False) -> int:
         if not evaluate and random.random() < self.epsilon():
-            # Fallback introspection — subclasses should pass action_dim directly
-            last = self.q_network.model[-1]
-            action_dim = getattr(last, 'out_features', None) or last.bias.shape[0]
+            # Prefer action_dim stored on the network (set by QNetwork, DuelingQNetwork,
+            # StructuredQNetwork). Fall back to inspecting the last layer of self.model
+            # for legacy compatibility. DoubleDQNAgent / DuelingDQNAgent override this
+            # method entirely and use self.action_dim instead.
+            action_dim = getattr(self.q_network, 'action_dim', None)
+            if action_dim is None:
+                last = self.q_network.model[-1]
+                action_dim = getattr(last, 'out_features', None) or last.bias.shape[0]
             return random.randint(0, action_dim - 1)
 
         with torch.no_grad():
+            # unsqueeze(0) adds the batch dimension regardless of state shape,
+            # so this works for both flat (147,) and structured (7,7,3) observations.
             state_t = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
             return self.q_network(state_t).argmax(dim=1).item()
 
