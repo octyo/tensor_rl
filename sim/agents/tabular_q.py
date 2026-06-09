@@ -313,7 +313,7 @@ class SarsaTTAgent(TTMultiTabularQAgent):
 
 class TabularQAgent:
     def __init__(self, state_space_size, action_space_size, lr=0.1, gamma=0.99,
-                 epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000):
+                 epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000, seed=None):
         self.q_table = np.zeros((state_space_size, action_space_size))
         self.lr = lr
         self.gamma = gamma
@@ -322,6 +322,8 @@ class TabularQAgent:
         self.epsilon_decay_steps = epsilon_decay_steps
         self.action_space_size = action_space_size
         self.steps = 0
+        if seed is not None:
+            random.seed(seed)
 
     def epsilon(self) -> float:
         progress = min(1.0, self.steps / self.epsilon_decay_steps)
@@ -359,7 +361,7 @@ class TensorizedTabularQAgent(TabularQAgent):
     """
 
     def __init__(self, state_space_size, action_space_size, rank=4, lr=0.1, gamma=0.99,
-                 epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000):
+                 epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000, seed=None):
         # Skip TabularQAgent.__init__ to avoid allocating the full Q-table
         self.action_space_size = action_space_size
         self.state_space_size = state_space_size
@@ -370,6 +372,9 @@ class TensorizedTabularQAgent(TabularQAgent):
         self.epsilon_end = epsilon_end
         self.epsilon_decay_steps = epsilon_decay_steps
         self.steps = 0
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
 
         scale = 1.0 / np.sqrt(state_space_size)
         self.factor_s = np.random.uniform(-scale, scale, (state_space_size, rank))
