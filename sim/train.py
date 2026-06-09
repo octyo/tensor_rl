@@ -14,7 +14,14 @@ from config import (DEFAULT_ENV, DEFAULT_SEED, DEFAULT_EPISODES, DEFAULT_NETWORK
                     DEFAULT_RANK, HIDDEN_SIZES, TAU)
 
 DEEP_ALGOS = {"dqn", "double_dqn", "dueling_dqn"}
-TABULAR_ALGOS = {"tabular_q", "sarsa", "tabular_q_tensor", "sarsa_tensor"}
+TABULAR_ALGOS = {
+    "tabular_q", "sarsa",
+    "tabular_q_tensor", "sarsa_tensor",   # legacy CP aliases
+    "tabular_q_cp", "sarsa_cp",
+    "tabular_q_tucker", "sarsa_tucker",
+    "tabular_q_tt", "sarsa_tt",
+}
+SARSA_ALGOS = {"sarsa", "sarsa_tensor", "sarsa_cp", "sarsa_tucker", "sarsa_tt"}
 STRUCTURED_NETWORKS = {"tt", "cp"}
 TABULAR_ENVS = {"FrozenLake-v1", "CliffWalking-v1"}
 
@@ -24,7 +31,11 @@ def parse_args():
     parser.add_argument("--env", type=str, default=DEFAULT_ENV)
     parser.add_argument("--algo", type=str, default="dqn",
                         choices=["dqn", "double_dqn", "dueling_dqn",
-                                 "tabular_q", "sarsa", "tabular_q_tensor", "sarsa_tensor"])
+                                 "tabular_q", "sarsa",
+                                 "tabular_q_tensor", "sarsa_tensor",
+                                 "tabular_q_cp", "sarsa_cp",
+                                 "tabular_q_tucker", "sarsa_tucker",
+                                 "tabular_q_tt", "sarsa_tt"])
     parser.add_argument("--network", type=str, default=DEFAULT_NETWORK,
                         choices=["standard", "cp", "tucker", "tt"])
     parser.add_argument("--rank", type=int, default=DEFAULT_RANK)
@@ -44,6 +55,8 @@ def parse_args():
                         help="Polyak update rate for Double/Dueling DQN target network")
     parser.add_argument("--seeds", type=str, default=str(DEFAULT_SEED),
                         help="Comma-separated seeds, e.g. '42,43,44'")
+    parser.add_argument("--max_steps", type=int, default=200,
+                        help="Max steps per episode for tabular training loop (default: 200)")
     parser.add_argument("--wandb", action="store_true")
     return parser.parse_args()
 
@@ -218,21 +231,51 @@ def aggregate_seeds(all_metrics: list, run_base: str):
     print(f"Aggregated results saved to {path}")
 
 
+def get_state_dims(env) -> tuple:
+    """Return the multi-dimensional state shape for tabular envs.
+
+    For FrozenLake: (nrow, ncol).  For CliffWalking: (4, 12).
+    Falls back to (n_states,) for any other Discrete env.
+    """
+    uw = env.unwrapped
+    if hasattr(uw, 'nrow') and hasattr(uw, 'ncol'):
+        return (uw.nrow, uw.ncol)
+    if hasattr(uw, 'shape') and isinstance(uw.shape, tuple) and len(uw.shape) >= 2:
+        return uw.shape
+    return (env.observation_space.n,)
+
+
 def make_tabular_agent(algo: str, env, args):
     """Factory for tabular agents. env must have Discrete observation and action spaces."""
-    from agents.tabular_q import TabularQAgent, SarsaAgent, TensorizedTabularQAgent, SarsaTensorAgent
+    from agents.tabular_q import (
+        TabularQAgent, SarsaAgent,
+        TensorizedTabularQAgent, SarsaTensorAgent,
+        CPMultiTabularQAgent, SarsaCPAgent,
+        TuckerMultiTabularQAgent, SarsaTuckerAgent,
+        TTMultiTabularQAgent, SarsaTTAgent,
+    )
     S = env.observation_space.n
     A = env.action_space.n
-    decay = args.episodes * 10  # decay over ~10 steps/episode on average
+    decay = args.episodes * 10
     common = dict(epsilon_decay_steps=decay)
+    state_dims = get_state_dims(env)
+
     if algo == "tabular_q":
         return TabularQAgent(S, A, **common)
     elif algo == "sarsa":
         return SarsaAgent(S, A, **common)
-    elif algo == "tabular_q_tensor":
-        return TensorizedTabularQAgent(S, A, rank=args.rank, **common)
-    elif algo == "sarsa_tensor":
-        return SarsaTensorAgent(S, A, rank=args.rank, **common)
+    elif algo in ("tabular_q_tensor", "tabular_q_cp"):
+        return CPMultiTabularQAgent(state_dims, A, rank=args.rank, **common)
+    elif algo in ("sarsa_tensor", "sarsa_cp"):
+        return SarsaCPAgent(state_dims, A, rank=args.rank, **common)
+    elif algo == "tabular_q_tucker":
+        return TuckerMultiTabularQAgent(state_dims, A, rank=args.rank, **common)
+    elif algo == "sarsa_tucker":
+        return SarsaTuckerAgent(state_dims, A, rank=args.rank, **common)
+    elif algo == "tabular_q_tt":
+        return TTMultiTabularQAgent(state_dims, A, rank=args.rank, **common)
+    elif algo == "sarsa_tt":
+        return SarsaTTAgent(state_dims, A, rank=args.rank, **common)
     else:
         raise ValueError(f"Unknown tabular algo: {algo}")
 
@@ -242,23 +285,29 @@ def run_tabular(args, seed: int):
     Works with any env that has integer (Discrete) observations, e.g. FrozenLake-v1.
     """
     env = gym.make(args.env)
+    state_dims = get_state_dims(env)
     agent = make_tabular_agent(args.algo, env, args)
     run_name = build_run_name(args, seed)
+
+    if state_dims != (env.observation_space.n,):
+        print(f"  state_dims={state_dims} (multi-D tensor indexing)")
+
     logger = Logger(use_wandb=args.wandb, project="tensor-rl", run_name=run_name)
+    is_sarsa = args.algo in SARSA_ALGOS
 
     for episode in range(1, args.episodes + 1):
         state, _ = env.reset(seed=seed + episode)
         done = False
         ep_reward = 0.0
         steps = 0
-        next_action = None  # used by SARSA to carry the chosen next action across steps
+        next_action = None
 
-        while not done:
+        while not done and steps < args.max_steps:
             action = next_action if next_action is not None else agent.select_action(state)
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
-            if args.algo in ("sarsa", "sarsa_tensor"):
+            if is_sarsa:
                 next_action = agent.select_action(next_state) if not done else None
                 agent.update(state, action, reward, next_state, done, next_action=next_action)
             else:
@@ -280,7 +329,8 @@ def run_tabular(args, seed: int):
 
 def build_run_name(args, seed: int) -> str:
     if args.algo in TABULAR_ALGOS:
-        rank_suffix = f"_rank{args.rank}" if "tensor" in args.algo else ""
+        uses_rank = args.algo not in {"tabular_q", "sarsa"}
+        rank_suffix = f"_rank{args.rank}" if uses_rank else ""
         return f"{args.env}_{args.algo}{rank_suffix}_seed{seed}"
     if args.structured:
         return f"{args.env}_{args.algo}_{args.network}_rank{args.rank}_struct_seed{seed}"
