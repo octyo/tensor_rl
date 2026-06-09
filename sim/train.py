@@ -3,6 +3,7 @@ import json
 import os
 import numpy as np
 
+import gymnasium as gym
 from envs.env_utils import make_env, make_env_structured
 from models.q_networks import QNetwork, DuelingQNetwork, StructuredQNetwork
 from agents.dqn_agent import DQNAgent
@@ -13,15 +14,17 @@ from config import (DEFAULT_ENV, DEFAULT_SEED, DEFAULT_EPISODES, DEFAULT_NETWORK
                     DEFAULT_RANK, HIDDEN_SIZES, TAU)
 
 DEEP_ALGOS = {"dqn", "double_dqn", "dueling_dqn"}
-TABULAR_ALGOS = {"tabular_q", "sarsa"}
+TABULAR_ALGOS = {"tabular_q", "sarsa", "tabular_q_tensor", "sarsa_tensor"}
 STRUCTURED_NETWORKS = {"tt", "cp"}
+TABULAR_ENVS = {"FrozenLake-v1", "CliffWalking-v1"}
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default=DEFAULT_ENV)
     parser.add_argument("--algo", type=str, default="dqn",
-                        choices=["dqn", "double_dqn", "dueling_dqn", "tabular_q", "sarsa"])
+                        choices=["dqn", "double_dqn", "dueling_dqn",
+                                 "tabular_q", "sarsa", "tabular_q_tensor", "sarsa_tensor"])
     parser.add_argument("--network", type=str, default=DEFAULT_NETWORK,
                         choices=["standard", "cp", "tucker", "tt"])
     parser.add_argument("--rank", type=int, default=DEFAULT_RANK)
@@ -215,7 +218,70 @@ def aggregate_seeds(all_metrics: list, run_base: str):
     print(f"Aggregated results saved to {path}")
 
 
+def make_tabular_agent(algo: str, env, args):
+    """Factory for tabular agents. env must have Discrete observation and action spaces."""
+    from agents.tabular_q import TabularQAgent, SarsaAgent, TensorizedTabularQAgent, SarsaTensorAgent
+    S = env.observation_space.n
+    A = env.action_space.n
+    decay = args.episodes * 10  # decay over ~10 steps/episode on average
+    common = dict(epsilon_decay_steps=decay)
+    if algo == "tabular_q":
+        return TabularQAgent(S, A, **common)
+    elif algo == "sarsa":
+        return SarsaAgent(S, A, **common)
+    elif algo == "tabular_q_tensor":
+        return TensorizedTabularQAgent(S, A, rank=args.rank, **common)
+    elif algo == "sarsa_tensor":
+        return SarsaTensorAgent(S, A, rank=args.rank, **common)
+    else:
+        raise ValueError(f"Unknown tabular algo: {algo}")
+
+
+def run_tabular(args, seed: int):
+    """Tabular training loop — no torch, no replay buffer, no DQN infrastructure.
+    Works with any env that has integer (Discrete) observations, e.g. FrozenLake-v1.
+    """
+    env = gym.make(args.env)
+    agent = make_tabular_agent(args.algo, env, args)
+    run_name = build_run_name(args, seed)
+    logger = Logger(use_wandb=args.wandb, project="tensor-rl", run_name=run_name)
+
+    for episode in range(1, args.episodes + 1):
+        state, _ = env.reset(seed=seed + episode)
+        done = False
+        ep_reward = 0.0
+        steps = 0
+        next_action = None  # used by SARSA to carry the chosen next action across steps
+
+        while not done:
+            action = next_action if next_action is not None else agent.select_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            if args.algo in ("sarsa", "sarsa_tensor"):
+                next_action = agent.select_action(next_state) if not done else None
+                agent.update(state, action, reward, next_state, done, next_action=next_action)
+            else:
+                agent.update(state, action, reward, next_state, done)
+                next_action = None
+
+            state = next_state
+            ep_reward += reward
+            steps += 1
+
+        logger.log(episode, ep_reward, steps)
+
+        if episode % 100 == 0:
+            print(f"  Ep {episode}/{args.episodes} | reward={ep_reward:.2f} | eps={agent.epsilon():.3f}")
+
+    logger.finish()
+    return logger.metrics
+
+
 def build_run_name(args, seed: int) -> str:
+    if args.algo in TABULAR_ALGOS:
+        rank_suffix = f"_rank{args.rank}" if "tensor" in args.algo else ""
+        return f"{args.env}_{args.algo}{rank_suffix}_seed{seed}"
     if args.structured:
         return f"{args.env}_{args.algo}_{args.network}_rank{args.rank}_struct_seed{seed}"
     tz_spec = args.tensorize_layers
@@ -232,8 +298,12 @@ def main():
     print(f"Setting up [{args.algo}] on [{args.env}] | network=[{args.network}] "
           f"rank={args.rank} {mode} | seeds={seeds}")
 
-    if args.algo not in DEEP_ALGOS:
-        raise ValueError("Tabular algos not supported via train.py — use agents directly.")
+    if args.algo in TABULAR_ALGOS:
+        for seed in seeds:
+            print(f"\n=== Seed {seed} | run: {build_run_name(args, seed)} ===")
+            run_tabular(args, seed)
+        print("\nTraining finished.")
+        return
 
     if args.structured:
         env, mode_dims = make_env_structured(args.env)
