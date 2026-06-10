@@ -19,18 +19,52 @@ sys.path.insert(0, os.path.abspath('.'))
 import json
 import numpy as np
 import gymnasium as gym
+from gymnasium import spaces
 import matplotlib.pyplot as plt
 from datetime import datetime
+import minigrid
+from minigrid.envs import EmptyEnv
 from agents.tabular_q import TabularQAgent, SarsaAgent, TensorizedTabularQAgent
+
+
+class FlatStateWrapper(gym.Wrapper):
+    """Wraps MiniGrid Empty env: integer state = (row*W + col)*4 + dir."""
+
+    def __init__(self, env):
+        super().__init__(env)
+        inner = env.unwrapped.width - 2
+        self.n_states = inner * inner * 4
+        self._inner = inner
+        self.observation_space = spaces.Discrete(self.n_states)
+        self.action_space = spaces.Discrete(3)  # left, right, forward only
+
+    def _obs(self):
+        ax, ay = self.unwrapped.agent_pos
+        col, row = ax - 1, ay - 1
+        return (row * self._inner + col) * 4 + self.unwrapped.agent_dir
+
+    def reset(self, **kwargs):
+        self.env.reset(**kwargs)
+        return self._obs(), {}
+
+    def step(self, action):
+        _, reward, terminated, truncated, info = self.env.step(action)
+        return self._obs(), reward, terminated, truncated, info
+
+
+gym.register(
+    id='Empty-4x4-v0',
+    entry_point=lambda: FlatStateWrapper(EmptyEnv(size=6)),
+)
 
 
 # ============================================================================
 # 1. ENVIRONMENT & HYPERPARAMETERS
 # ============================================================================
 
-ENV_ID = 'FrozenLake-v1'
-STATE_SPACE = 16  # 4x4 grid
-ACTION_SPACE = 4
+ENV_ID = 'Empty-4x4-v0'  # MiniGrid 4x4 interior, flat (pos, dir) state
+STATE_SPACE = 64   # 16 positions × 4 directions
+ACTION_SPACE = 3   # left, right, forward
 
 # Training hyperparameters
 LEARNING_RATE = 0.5
@@ -102,7 +136,7 @@ def print_parameter_counts():
 # 3. RUN AGENT FUNCTION
 # ============================================================================
 
-def run_agent(agent, env_id='FrozenLake-v1', n_steps=2000, seed=42):
+def run_agent(agent, env_id='Empty-4x4-v0', n_steps=2000, seed=42):
     """
     Run a single agent for n_steps and return episode rewards + convergence metrics.
     
@@ -116,7 +150,7 @@ def run_agent(agent, env_id='FrozenLake-v1', n_steps=2000, seed=42):
         ep_rewards: List of episode rewards
         step_log: List of (step, avg_reward) tuples
     """
-    env = gym.make(env_id, is_slippery=False)
+    env = gym.make(env_id)
     state, _ = env.reset(seed=seed)
     
     ep_reward = 0.0
@@ -220,12 +254,13 @@ def print_results_summary(results):
         final_std = result['final_std']
         
         # Extract rank if tensorized
+        baseline_params = STATE_SPACE * ACTION_SPACE
         if 'rank=' in agent_name:
             rank = int(agent_name.split('rank=')[1].rstrip(')'))
             params = count_parameters('tensorized', rank=rank)
-            param_str = f"{params} ({100*(1-params/64):.0f}% less)"
+            param_str = f"{params} ({100*(1-params/baseline_params):.0f}% less)"
         else:
-            params = 64
+            params = baseline_params
             param_str = f"{params} (baseline)"
         
         print(f"{agent_name:<25} {final_mean:<20.4f} {final_std:<15.4f} {param_str:<15}")
