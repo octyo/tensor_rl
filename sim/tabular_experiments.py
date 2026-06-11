@@ -53,8 +53,8 @@ class FlatStateWrapper(gym.Wrapper):
 
 
 gym.register(
-    id='Empty-4x4-v0',
-    entry_point=lambda: FlatStateWrapper(EmptyEnv(size=6)),
+    id='Empty-100x100-v0',
+    entry_point=lambda: FlatStateWrapper(EmptyEnv(size=102)),
 )
 
 
@@ -62,8 +62,8 @@ gym.register(
 # 1. ENVIRONMENT & HYPERPARAMETERS
 # ============================================================================
 
-ENV_ID = 'Empty-4x4-v0'  # MiniGrid 4x4 interior, flat (pos, dir) state
-STATE_SPACE = 64   # 16 positions × 4 directions
+ENV_ID = 'Empty-100x100-v0'  # MiniGrid 100x100 interior, flat (pos, dir) state
+STATE_SPACE = 40000   # 10000 positions × 4 directions
 ACTION_SPACE = 3   # left, right, forward
 
 # Training hyperparameters
@@ -74,7 +74,7 @@ EPSILON_END = 0.01
 EPSILON_DECAY_STEPS = 2000
 
 # Experiment settings
-RANKS = [1, 2, 4, 8, 16]
+RANKS = [1, 2, 4, 8, 16, 32, 64]
 N_STEPS = 5000  # Total environment steps per agent
 N_SEEDS = 3  # Number of random seeds for averaging
 EVAL_INTERVAL = 100  # Steps between evaluation windows
@@ -83,13 +83,22 @@ EVAL_INTERVAL = 100  # Steps between evaluation windows
 def print_config():
     """Print configuration details."""
     print("="*70)
-    print("TABULAR RL EXPERIMENTS: CP Tensorized Q-Learning")
+    print("TABULAR RL EXPERIMENTS: CP Tensorized Q-Learning (100×100 Grid)")
     print("="*70)
     print(f"Environment: {ENV_ID}")
     print(f"State space: {STATE_SPACE}, Action space: {ACTION_SPACE}")
     print(f"Training steps per agent: {N_STEPS}")
     print(f"Number of seeds: {N_SEEDS}")
     print(f"Ranks to test: {RANKS}")
+
+    # Time estimate
+    n_agents = 2 + len(RANKS)  # 2 baselines + tensorized
+    total_runs = n_agents * N_SEEDS
+    est_time_per_run = 60  # seconds, rough estimate for 40K states
+    total_est_seconds = total_runs * est_time_per_run
+    total_est_minutes = total_est_seconds / 60
+    print(f"\nFull sweep: {total_runs} runs ({n_agents} agents × {N_SEEDS} seeds)")
+    print(f"Estimated time: ~{total_est_minutes:.0f} minutes (~{total_est_minutes/60:.1f} hours)")
     print("="*70 + "\n")
 
 
