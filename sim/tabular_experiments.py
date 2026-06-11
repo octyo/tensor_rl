@@ -53,8 +53,8 @@ class FlatStateWrapper(gym.Wrapper):
 
 
 gym.register(
-    id='Empty-100x100-v0',
-    entry_point=lambda: FlatStateWrapper(EmptyEnv(size=102)),
+    id='Empty-10x10-v0',
+    entry_point=lambda: FlatStateWrapper(EmptyEnv(size=12)),
 )
 
 
@@ -62,8 +62,8 @@ gym.register(
 # 1. ENVIRONMENT & HYPERPARAMETERS
 # ============================================================================
 
-ENV_ID = 'Empty-100x100-v0'  # MiniGrid 100x100 interior, flat (pos, dir) state
-STATE_SPACE = 40000   # 10000 positions × 4 directions
+ENV_ID = 'Empty-10x10-v0'  # MiniGrid 10x10 interior, flat (pos, dir) state
+STATE_SPACE = 400   # 100 positions × 4 directions
 ACTION_SPACE = 3   # left, right, forward
 
 # Training hyperparameters
@@ -83,7 +83,7 @@ EVAL_INTERVAL = 100  # Steps between evaluation windows
 def print_config():
     """Print configuration details."""
     print("="*70)
-    print("TABULAR RL EXPERIMENTS: CP Tensorized Q-Learning (100×100 Grid)")
+    print("TABULAR RL EXPERIMENTS: CP Tensorized Q-Learning (10×10 Grid)")
     print("="*70)
     print(f"Environment: {ENV_ID}")
     print(f"State space: {STATE_SPACE}, Action space: {ACTION_SPACE}")
@@ -94,11 +94,11 @@ def print_config():
     # Time estimate
     n_agents = 2 + len(RANKS)  # 2 baselines + tensorized
     total_runs = n_agents * N_SEEDS
-    est_time_per_run = 60  # seconds, rough estimate for 40K states
+    est_time_per_run = 8  # seconds, rough estimate for 400 states
     total_est_seconds = total_runs * est_time_per_run
     total_est_minutes = total_est_seconds / 60
     print(f"\nFull sweep: {total_runs} runs ({n_agents} agents × {N_SEEDS} seeds)")
-    print(f"Estimated time: ~{total_est_minutes:.0f} minutes (~{total_est_minutes/60:.1f} hours)")
+    print(f"Estimated time: ~{total_est_minutes:.1f} minutes")
     print("="*70 + "\n")
 
 
@@ -389,8 +389,8 @@ def plot_results(results):
 
 def run_full_sweep():
     """Run complete experiment with all agents, ranks, and seeds."""
-    FULL_RANKS = [1, 2, 4, 8, 16]
-    FULL_SEEDS = 5
+    FULL_RANKS = RANKS  # Use global RANKS list
+    FULL_SEEDS = N_SEEDS
     
     full_results = {}
     
