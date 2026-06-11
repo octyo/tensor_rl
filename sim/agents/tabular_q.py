@@ -197,8 +197,12 @@ class TuckerMultiTabularQAgent(_TensorTabularBase):
         grad_G = vs[0].copy()
         for v in vs[1:]:
             grad_G = np.multiply.outer(grad_G, v)
+        # Normalize G gradient by the product of factor norms so the update magnitude
+        # is lr*delta regardless of how large the factors grow.
+        factor_norm_product = float(np.prod([np.linalg.norm(v) for v in vs]))
+        if factor_norm_product > 1e-8:
+            grad_G = grad_G / factor_norm_product
         self.G += self.lr * delta * grad_G
-        # Clip G element-wise
         np.clip(self.G, -self._MAX_FACTOR_NORM, self._MAX_FACTOR_NORM, out=self.G)
 
         for n in range(N):
