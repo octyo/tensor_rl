@@ -4,6 +4,38 @@ from gymnasium.wrappers import FlattenObservation
 import minigrid
 
 
+def make_env_cnn(env_id: str):
+    """Creates an environment with spatial (image-like) observations for CNN inputs.
+
+    Returns (env, obs_shape) where obs_shape is channels-first (C, H, W).
+
+    For MiniGrid: applies ImgObsWrapper (H, W, C) and transposes to (C, H, W).
+    For other envs: falls back to flat obs wrapped as (1, 1, N) — CNN degenerates to linear.
+
+    The returned env yields observations in channels-first format (C, H, W).
+    """
+    env = gym.make(env_id)
+    if "MiniGrid" in env_id:
+        from minigrid.wrappers import ImgObsWrapper
+        env = ImgObsWrapper(env)
+        h, w, c = env.observation_space.shape   # (H, W, C)
+        obs_shape = (c, h, w)                   # channels-first for Conv2d
+        # Wrap to transpose obs automatically
+        env = _ChannelsFirstWrapper(env)
+    else:
+        env = FlattenObservation(env)
+        n = env.observation_space.shape[0]
+        obs_shape = (1, 1, n)                   # degenerate spatial shape
+    return env, obs_shape
+
+
+class _ChannelsFirstWrapper(gym.ObservationWrapper):
+    """Transpose MiniGrid (H, W, C) observations to channels-first (C, H, W)."""
+
+    def observation(self, obs):
+        return np.transpose(obs, (2, 0, 1))
+
+
 def make_env(env_id: str):
     """Creates a Gym/MiniGrid environment with observations flattened to a 1D vector."""
     env = gym.make(env_id)
