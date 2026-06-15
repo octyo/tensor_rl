@@ -56,6 +56,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.tabular_baseline import TabularGridQAgent, value_iteration_q
 from agents.cp_agent import CPGridQAgent
 from envs.gridworld import GridWorld, NUM_ACTIONS
+from rank_analysis import cp_capture_curve, plot_capture_panel
 
 
 # ============================================================================
@@ -232,15 +233,17 @@ RANKS = [2, 3, 6]
 # 5. PLOTTING
 # ============================================================================
 
-def plot_results(configs: list, grid: int, out_path: str):
-    """4-panel figure; headline is the policy-accuracy learning curve."""
+def plot_results(configs: list, grid: int, out_path: str,
+                 capture_curve: list = None, tabular_params: int = None,
+                 trained_ranks: list = None):
+    """6-panel figure; headline is the policy-accuracy learning curve."""
     tab_color = "#d62728"
     cp_colors = ["#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf"]
 
     def color_for(cfg, idx):
         return tab_color if cfg["kind"] == "tabular" else cp_colors[idx % len(cp_colors)]
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 11))
 
     # Panel 1: policy accuracy learning curve (the headline)
     ax = axes[0, 0]
@@ -321,6 +324,16 @@ def plot_results(configs: list, grid: int, out_path: str):
     ax.set_ylabel("Final policy accuracy", fontsize=11)
     ax.set_title("Parameters vs final accuracy", fontsize=13, fontweight="bold")
     ax.grid(True, alpha=0.3)
+
+    # Panel 5: representation capacity — % of exact Q* captured vs CP rank
+    if capture_curve is not None:
+        plot_capture_panel(axes[0, 2], capture_curve, tabular_params,
+                           trained_ranks=trained_ranks)
+    else:
+        axes[0, 2].axis("off")
+
+    # Panel 6 unused
+    axes[1, 2].axis("off")
 
     fig.suptitle(
         f"CP-decomposed vs tabular Q-learning  —  {grid}x{grid} random-start grid "
@@ -404,8 +417,20 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    # Representation-capacity analysis: how much of exact Q* each rank can store
+    print("\nComputing CP representation capacity (% of Q* captured per rank) ...",
+          end=" ", flush=True)
+    capture_ranks = sorted(set([1, 2, 3, 4, 6, 8, 10, 12] + list(args.ranks)))
+    capture_curve = cp_capture_curve(q_star, capture_ranks)
+    print("done.")
+    print(f"{'rank':<6}{'% of Q* captured':<18}")
+    for c in capture_curve:
+        print(f"{c['rank']:<6}{c['pct_captured']:<18.3f}")
+
     png_path = os.path.join(out_dir, f"cp_speedup_{stamp}.png")
-    plot_results(configs, grid, png_path)
+    plot_results(configs, grid, png_path,
+                 capture_curve=capture_curve, tabular_params=tab_params,
+                 trained_ranks=list(args.ranks))
 
     json_path = os.path.join(out_dir, f"cp_speedup_{stamp}.json")
     with open(json_path, "w") as f:
