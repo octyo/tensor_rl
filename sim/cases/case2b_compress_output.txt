@@ -1,0 +1,23 @@
+Case 2b: Post-Hoc Compression  (env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44])
+env=MiniGrid-Empty-5x5-v0
+
+Config        Params    vs_std    Compression    Solve%       Reward           
+----------------------------------------------------------------------------
+standard      36359     1.00      -              33%          0.318 +/- 0.450  
+cp_r2         1595      0.044     4% of std      0% +/- 0%    0.000 +/- 0.000  
+cp_r4         2927      0.081     8% of std      0% +/- 0%    0.000 +/- 0.000  
+cp_r8         5591      0.154     15% of std     0% +/- 0%    0.000 +/- 0.000  
+cp_r16        10919     0.300     30% of std     0% +/- 0%    0.000 +/- 0.000  
+tucker_r2     1607      0.044     4% of std      0% +/- 0%    0.000 +/- 0.000  
+tucker_r4     2975      0.082     8% of std      0% +/- 0%    0.000 +/- 0.000  
+tucker_r8     5768      0.159     16% of std     0% +/- 0%    0.000 +/- 0.000  
+tucker_r16    11480     0.316     32% of std     0% +/- 0%    0.000 +/- 0.000  
+mps_r2        891       0.025     2% of std      0% +/- 0%    0.000 +/- 0.000  
+mps_r4        2095      0.058     6% of std      0% +/- 0%    0.000 +/- 0.000  
+mps_r8        6231      0.171     17% of std     0% +/- 0%    0.000 +/- 0.000  
+mps_r16       21415     0.589     59% of std     0% +/- 0%    0.000 +/- 0.000  
+----------------------------------------------------------------------------
+
+Standard pre-compress: 36359 params, reward=0.318, solve=33%
+env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44], algo=double_dqn
+Total runtime: 16.3 min

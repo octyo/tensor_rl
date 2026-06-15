@@ -29,19 +29,49 @@ def make_env_cnn(env_id: str):
     return env, obs_shape
 
 
-class _ChannelsFirstWrapper(gym.ObservationWrapper):
-    """Transpose MiniGrid (H, W, C) observations to channels-first (C, H, W)."""
+class _NormalizeWrapper(gym.ObservationWrapper):
+    """Divide observation by a fixed scale so values land in [0, 1].
+
+    MiniGrid ImgObsWrapper returns uint8 values in [0, 10] (object/color/state encodings).
+    Scaling to [0, 1] stabilises Q-network training.
+    """
+    def __init__(self, env, scale: float = 10.0):
+        super().__init__(env)
+        self._scale = scale
+        low  = self.observation_space.low.astype(np.float32)  / scale
+        high = self.observation_space.high.astype(np.float32) / scale
+        self.observation_space = gym.spaces.Box(low, high,
+                                                dtype=np.float32)
 
     def observation(self, obs):
-        return np.transpose(obs, (2, 0, 1))
+        return obs.astype(np.float32) / self._scale
+
+
+class _ChannelsFirstWrapper(gym.ObservationWrapper):
+    """Transpose MiniGrid (H, W, C) observations to channels-first (C, H, W) and normalise."""
+
+    def __init__(self, env, scale: float = 10.0):
+        super().__init__(env)
+        self._scale = scale
+        h, w, c = env.observation_space.shape
+        self.observation_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(c, h, w), dtype=np.float32
+        )
+
+    def observation(self, obs):
+        return np.transpose(obs, (2, 0, 1)).astype(np.float32) / self._scale
 
 
 def make_env(env_id: str):
-    """Creates a Gym/MiniGrid environment with observations flattened to a 1D vector."""
+    """Creates a Gym/MiniGrid environment with observations flattened to a 1D float vector.
+
+    For MiniGrid: applies ImgObsWrapper then normalises values to [0, 1] (÷10).
+    """
     env = gym.make(env_id)
     if "MiniGrid" in env_id:
         from minigrid.wrappers import ImgObsWrapper
         env = ImgObsWrapper(env)
+        env = _NormalizeWrapper(env)
     env = FlattenObservation(env)
     return env
 
@@ -59,6 +89,7 @@ def make_env_structured(env_id: str):
     if "MiniGrid" in env_id:
         from minigrid.wrappers import ImgObsWrapper
         env = ImgObsWrapper(env)
+        env = _NormalizeWrapper(env)
         mode_dims = env.observation_space.shape  # (7, 7, 3)
     else:
         env = FlattenObservation(env)

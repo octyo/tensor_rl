@@ -132,7 +132,10 @@ def make_agent(algo: str, action_dim: int, args, state_dim: int = None,
     For flat path: state_dim must be provided.
     """
     tz = args.tensorize_layers
-    eps_decay = args.episodes * 100
+    # Target: epsilon finishes decaying by ~75% of the run.
+    # MiniGrid-Empty-5x5 averages ~50 steps/episode; use 40 as a conservative estimate
+    # so epsilon reaches epsilon_end before the run is over.
+    eps_decay = args.episodes * 40
     tt_dims = (tuple(int(x) for x in args.tt_dims.split(","))
                if getattr(args, 'tt_dims', None) else None)
 

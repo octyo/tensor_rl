@@ -59,6 +59,75 @@ gym.register(
 
 
 # ============================================================================
+# 0. VALUE ITERATION — computes exact Q* for the flat grid env
+# ============================================================================
+
+def _build_transition_model(inner: int, n_actions: int = 3, gamma: float = 0.99):
+    """Build (S, A) → (S', R, done) transition tables for the flat Empty grid.
+
+    State encoding: s = (row * inner + col) * 4 + dir
+    Actions: 0=turn_left, 1=turn_right, 2=move_forward
+    Goal: bottom-right interior cell (row=inner-1, col=inner-1), reward=1-0.9/max_steps
+    Walls: agent stays in place when moving into a boundary.
+    """
+    S = inner * inner * 4
+    next_s = np.zeros((S, n_actions), dtype=int)
+    reward  = np.zeros((S, n_actions), dtype=float)
+    done    = np.zeros((S, n_actions), dtype=bool)
+
+    goal_row, goal_col = inner - 1, inner - 1
+    # MiniGrid direction encoding: 0=right, 1=down, 2=left, 3=up
+    dr = [0,  1,  0, -1]
+    dc = [1,  0, -1,  0]
+
+    for row in range(inner):
+        for col in range(inner):
+            for direction in range(4):
+                s = (row * inner + col) * 4 + direction
+                for a in range(n_actions):
+                    if a == 0:   # turn left
+                        new_dir = (direction - 1) % 4
+                        ns = (row * inner + col) * 4 + new_dir
+                        next_s[s, a], reward[s, a], done[s, a] = ns, -0.01, False
+                    elif a == 1:  # turn right
+                        new_dir = (direction + 1) % 4
+                        ns = (row * inner + col) * 4 + new_dir
+                        next_s[s, a], reward[s, a], done[s, a] = ns, -0.01, False
+                    else:         # move forward
+                        nr = row + dr[direction]
+                        nc = col + dc[direction]
+                        if 0 <= nr < inner and 0 <= nc < inner:
+                            if nr == goal_row and nc == goal_col:
+                                ns = (nr * inner + nc) * 4 + direction
+                                next_s[s, a], reward[s, a], done[s, a] = ns, 1.0, True
+                            else:
+                                ns = (nr * inner + nc) * 4 + direction
+                                next_s[s, a], reward[s, a], done[s, a] = ns, -0.01, False
+                        else:
+                            next_s[s, a], reward[s, a], done[s, a] = s, -0.01, False
+    return next_s, reward, done
+
+
+def compute_q_star(inner: int = 10, gamma: float = 0.99, theta: float = 1e-8) -> np.ndarray:
+    """Value iteration → exact Q* for the flat Empty grid.
+
+    Returns Q* as a (S, A) array.
+    """
+    n_actions = 3
+    next_s, rew, terminal = _build_transition_model(inner, n_actions, gamma)
+    S = inner * inner * 4
+    Q = np.zeros((S, n_actions))
+
+    while True:
+        Q_new = rew + gamma * (1 - terminal.astype(float)) * np.max(Q[next_s], axis=2)
+        if np.max(np.abs(Q_new - Q)) < theta:
+            Q = Q_new
+            break
+        Q = Q_new
+    return Q
+
+
+# ============================================================================
 # 1. ENVIRONMENT & HYPERPARAMETERS
 # ============================================================================
 
