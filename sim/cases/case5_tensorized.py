@@ -42,21 +42,28 @@ def main():
     all_conv_rows = []
     t0            = time.time()
 
+    configs_a = [(nt, 4 if nt == 'standard' else FIXED_RANK) for nt in TYPES]
+    configs_b = [(nt, r) for nt in ['cp', 'tucker', 'tt', 'mps'] for r in RANKS]
+    n_configs = len(configs_a) + len(configs_b)
+    config_idx = 0
+
     # --- Sub-experiment A: all types at fixed rank ---
     print(f'\n{"="*60}')
-    print(f'A) All types at rank={FIXED_RANK}')
+    print(f'A) All types at rank={FIXED_RANK}  ({len(configs_a)} configs)')
     print('='*60)
 
     rows_a = []
     for net_type in TYPES:
+        config_idx += 1
         rank  = 4 if net_type == 'standard' else FIXED_RANK
         label = f'{net_type}_r{rank}'
-        print(f'\n  Config: {label}')
+        print(f'\n  [config {config_idx}/{n_configs}] {label}')
 
         def factory(nt=net_type, r=rank):
             return make_net(state_dim, action_dim, nt, r)
 
-        res = run_seeds(train_flat, factory, label=label)
+        res = run_seeds(train_flat, factory, label=label,
+                        config_idx=config_idx, config_total=n_configs, experiment_t0=t0)
         vs  = f"{res['n_params'] / std_params:.3f}"
         rows_a.append([label, res['n_params'], vs,
                        f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
@@ -70,27 +77,30 @@ def main():
 
     # --- Sub-experiment B: rank sweep for all tensor types ---
     print(f'\n{"="*60}')
-    print('B) Rank sweep for all tensor types')
+    print(f'B) Rank sweep for all tensor types  ({len(configs_b)} configs)')
     print('='*60)
 
     rows_b = []
     for net_type in ['cp', 'tucker', 'tt', 'mps']:
         for rank in RANKS:
+            config_idx += 1
             label = f'{net_type}_r{rank}'
-            print(f'\n  Config: {label}')
+            print(f'\n  [config {config_idx}/{n_configs}] {label}')
 
             def factory(nt=net_type, r=rank):
                 return make_net(state_dim, action_dim, nt, r)
 
             try:
-                res = run_seeds(train_flat, factory, label=label)
+                res = run_seeds(train_flat, factory, label=label,
+                                config_idx=config_idx, config_total=n_configs,
+                                experiment_t0=t0)
                 vs  = f"{res['n_params'] / std_params:.3f}"
                 rows_b.append([label, res['n_params'], vs,
                                f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                                f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
                 all_conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
             except Exception as e:
-                print(f"    ERROR: {e}")
+                print(f"    ERROR: {e}", flush=True)
                 rows_b.append([label, 'ERR', '-', '-', str(e)[:40]])
                 all_conv_rows.append([label] + ['-'] * 10)
     all_rows.extend(rows_b)

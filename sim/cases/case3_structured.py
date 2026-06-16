@@ -39,14 +39,20 @@ def main():
     conv_rows = []
     t0        = time.time()
 
+    configs      = [('standard', None)] + [(m, r) for m in METHODS for r in RANKS]
+    n_configs    = len(configs)
+    config_idx   = 0
+
     # Baseline: standard flat DQN
-    print('\n  Config: standard (flat baseline)')
+    config_idx += 1
+    print(f'\n  [config {config_idx}/{n_configs}] standard (flat baseline)')
 
     def std_factory():
         return QNetwork(state_dim, action_dim, hidden_sizes=(128, 128),
                         network_type='standard', rank=4)
 
-    res = run_seeds(train_flat, std_factory, label='standard')
+    res = run_seeds(train_flat, std_factory, label='standard',
+                    config_idx=config_idx, config_total=n_configs, experiment_t0=t0)
     rows.append(['standard', res['n_params'], '1.00',
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
@@ -55,8 +61,9 @@ def main():
     # Structured embedding sweep
     for method in METHODS:
         for rank in RANKS:
+            config_idx += 1
             label = f'{method}_r{rank}'
-            print(f'\n  Config: {label}  mode_dims={mode_dims}')
+            print(f'\n  [config {config_idx}/{n_configs}] {label}  mode_dims={mode_dims}')
 
             def factory(md=mode_dims, m=method, r=rank):
                 return StructuredQNetwork(md, action_dim,
@@ -65,14 +72,16 @@ def main():
                                          rank=r)
 
             try:
-                res = run_seeds(train_structured, factory, label=label)
+                res = run_seeds(train_structured, factory, label=label,
+                                config_idx=config_idx, config_total=n_configs,
+                                experiment_t0=t0)
                 vs  = f"{res['n_params'] / std_params:.3f}"
                 rows.append([label, res['n_params'], vs,
                              f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                              f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
                 conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
             except Exception as e:
-                print(f"    ERROR: {e}")
+                print(f"    ERROR: {e}", flush=True)
                 rows.append([label, 'ERR', '-', '-', str(e)[:40]])
                 conv_rows.append([label] + ['-'] * 10)
 

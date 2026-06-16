@@ -43,14 +43,21 @@ def main():
     conv_rows = []
     t0        = time.time()
 
+    configs   = [('cnn_standard', None, None)] + \
+                [(cm, nt, r) for cm in CNN_MODES for nt in NET_TYPES for r in RANKS]
+    n_configs = len(configs)
+    config_idx = 0
+
     # Baseline: standard CNN (backbone + standard linear)
-    print('\n  Config: cnn_standard (baseline)')
+    config_idx += 1
+    print(f'\n  [config {config_idx}/{n_configs}] cnn_standard (baseline)')
 
     def cnn_std_factory(obs=obs_shape):
         return CNNQNetwork(obs, action_dim, rank=4, network_type='standard',
                            cnn_mode='backbone', hidden_sizes=(128, 128))
 
-    res = run_seeds(train_cnn, cnn_std_factory, label='cnn_standard')
+    res = run_seeds(train_cnn, cnn_std_factory, label='cnn_standard',
+                    config_idx=config_idx, config_total=n_configs, experiment_t0=t0)
     vs  = f"{res['n_params'] / std_params:.3f}"
     rows.append(['cnn_standard', res['n_params'], vs,
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
@@ -61,8 +68,9 @@ def main():
     for cnn_mode in CNN_MODES:
         for net_type in NET_TYPES:
             for rank in RANKS:
+                config_idx += 1
                 label = f'{cnn_mode}_{net_type}_r{rank}'
-                print(f'\n  Config: {label}  obs_shape={obs_shape}')
+                print(f'\n  [config {config_idx}/{n_configs}] {label}  obs_shape={obs_shape}')
 
                 def factory(obs=obs_shape, cm=cnn_mode, nt=net_type, r=rank):
                     return CNNQNetwork(obs, action_dim, rank=r,
@@ -70,14 +78,16 @@ def main():
                                       hidden_sizes=(128, 128))
 
                 try:
-                    res = run_seeds(train_cnn, factory, label=label)
+                    res = run_seeds(train_cnn, factory, label=label,
+                                    config_idx=config_idx, config_total=n_configs,
+                                    experiment_t0=t0)
                     vs  = f"{res['n_params'] / std_params:.3f}"
                     rows.append([label, res['n_params'], vs,
                                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
                     conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
                 except Exception as e:
-                    print(f"    ERROR: {e}")
+                    print(f"    ERROR: {e}", flush=True)
                     rows.append([label, 'ERR', '-', '-', str(e)[:40]])
                     conv_rows.append([label] + ['-'] * 10)
 

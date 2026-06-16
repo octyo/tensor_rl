@@ -129,16 +129,28 @@ def train_cnn(q_net_factory, n_episodes=N_EPISODES, seed=42, algo=ALGO):
 # ---------------------------------------------------------------------------
 
 def run_seeds(train_fn, factory, n_episodes=N_EPISODES, seeds=SEEDS,
-              algo=ALGO, label=''):
+              algo=ALGO, label='', config_idx=None, config_total=None,
+              experiment_t0=None):
+    import time as _time
     results = []
-    for seed in seeds:
-        print(f"    [{label}] seed={seed}  ({n_episodes} eps):", flush=True)
+    for s_idx, seed in enumerate(seeds):
+        seed_tag = f"seed {s_idx+1}/{len(seeds)} (={seed})"
+        cfg_tag  = (f"  [config {config_idx}/{config_total}]"
+                    if config_idx is not None else "")
+        print(f"\n    [{label}]{cfg_tag}  {seed_tag}  ({n_episodes} eps)", flush=True)
         m = train_fn(factory, n_episodes=n_episodes, seed=seed, algo=algo)
         results.append(m)
+        eta_str = ""
+        if experiment_t0 is not None and config_idx is not None and config_total is not None:
+            elapsed_total = _time.time() - experiment_t0
+            frac_done = ((config_idx - 1) * len(seeds) + (s_idx + 1)) / (config_total * len(seeds))
+            if frac_done > 0:
+                eta = elapsed_total / frac_done * (1 - frac_done)
+                eta_str = f"  ETA={eta/60:.1f}min"
         print(f"      -> reward={m['reward_mean']:.3f}  "
               f"solve={m['solve_rate']:.0%}  "
               f"params={m['n_params']}  "
-              f"time={m['elapsed_s']:.1f}s", flush=True)
+              f"time={m['elapsed_s']:.1f}s{eta_str}", flush=True)
     # Per-seed quantile means averaged across seeds
     n_quantiles = len(results[0]['quantile_means'])
     avg_quantiles = [float(np.mean([r['quantile_means'][i] for r in results]))
