@@ -235,7 +235,7 @@ RANKS = [2, 3, 6]
 
 def plot_results(configs: list, grid: int, out_path: str,
                  capture_curve: list = None, tabular_params: int = None,
-                 trained_ranks: list = None):
+                 trained_ranks: list = None, start_label: str = "random-start"):
     """6-panel figure; headline is the policy-accuracy learning curve."""
     tab_color = "#d62728"
     cp_colors = ["#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf"]
@@ -336,7 +336,7 @@ def plot_results(configs: list, grid: int, out_path: str,
     axes[1, 2].axis("off")
 
     fig.suptitle(
-        f"CP-decomposed vs tabular Q-learning  —  {grid}x{grid} random-start grid "
+        f"CP-decomposed vs tabular Q-learning  —  {grid}x{grid} {start_label} grid "
         f"({grid*grid} states, {grid*grid*NUM_ACTIONS}-cell table)",
         fontsize=14, fontweight="bold")
     plt.tight_layout(rect=[0, 0, 1, 0.97])
@@ -358,16 +358,21 @@ def main():
     parser.add_argument("--episodes", type=int, default=None)
     parser.add_argument("--seeds", type=int, default=None)
     parser.add_argument("--eval-every", type=int, default=100)
+    parser.add_argument("--start", choices=["random", "fixed"], default="random",
+                        help="random = spawn anywhere (CP shines); "
+                             "fixed = always start at (0,0)")
     args = parser.parse_args()
 
     n_seeds = args.seeds if args.seeds is not None else (5 if args.full else 3)
     n_episodes = args.episodes if args.episodes is not None else (4000 if args.full else 2500)
     grid = args.grid
+    env_cls = RandomStartGridWorld if args.start == "random" else GridWorld
+    start_label = "random-start" if args.start == "random" else "fixed-start (0,0)"
 
     print("=" * 72)
     print("CP vs TABULAR Q-LEARNING — learning-speed experiment")
     print("=" * 72)
-    print(f"Environment : {grid}x{grid} random-start grid  "
+    print(f"Environment : {grid}x{grid} {start_label} grid  "
           f"({grid*grid} states, dense -1/step reward)")
     print(f"Baseline    : tabular Q-table  ({grid*grid*NUM_ACTIONS} params)")
     print(f"CP ranks    : {args.ranks}  "
@@ -375,7 +380,7 @@ def main():
     print(f"Episodes    : {n_episodes}   Seeds : {n_seeds}   Eval every : {args.eval_every}")
     print("=" * 72 + "\n")
 
-    env = RandomStartGridWorld(rows=grid, cols=grid)
+    env = env_cls(rows=grid, cols=grid)
     print("Computing exact Q* via value iteration ...", end=" ", flush=True)
     q_star = value_iteration_q(env, gamma=GAMMA)
     opt_mask = optimal_action_mask(q_star)
@@ -427,12 +432,12 @@ def main():
     for c in capture_curve:
         print(f"{c['rank']:<6}{c['pct_captured']:<18.3f}")
 
-    png_path = os.path.join(out_dir, f"cp_speedup_{stamp}.png")
+    png_path = os.path.join(out_dir, f"cp_speedup_{args.start}_{stamp}.png")
     plot_results(configs, grid, png_path,
                  capture_curve=capture_curve, tabular_params=tab_params,
-                 trained_ranks=list(args.ranks))
+                 trained_ranks=list(args.ranks), start_label=start_label)
 
-    json_path = os.path.join(out_dir, f"cp_speedup_{stamp}.json")
+    json_path = os.path.join(out_dir, f"cp_speedup_{args.start}_{stamp}.json")
     with open(json_path, "w") as f:
         json.dump({"grid": grid, "n_episodes": n_episodes, "n_seeds": n_seeds,
                    "tabular_params": tab_params, "configs": configs}, f, indent=2)
