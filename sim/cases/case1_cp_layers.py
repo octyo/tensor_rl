@@ -30,8 +30,9 @@ def main():
                           network_type='standard', rank=4)
     std_params = sum(p.numel() for p in ref_net.parameters())
 
-    rows = []
-    t0   = time.time()
+    rows      = []
+    conv_rows = []
+    t0        = time.time()
 
     # Baseline row first
     print('\n  Config: standard (baseline)')
@@ -44,6 +45,7 @@ def main():
     rows.append(['standard', res['n_params'], '1.00',
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+    conv_rows.append(['standard'] + [f'{q:.3f}' for q in res['avg_quantiles']])
 
     # CP rank sweep
     for rank in RANKS:
@@ -59,7 +61,10 @@ def main():
         rows.append([label, res['n_params'], vs,
                      f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                      f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+        conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
 
+    pct_headers  = [f'{(i+1)*10}%' for i in range(10)]
+    conv_headers = ['Config'] + pct_headers
     headers = ['Config', 'Params', 'vs_std', 'Solve%', 'Reward']
     title   = (f"Case 1: CP Layers  "
                f"(env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS})")
@@ -68,9 +73,9 @@ def main():
     print(f"  Total time: {(time.time()-t0)/60:.1f} min")
 
     notes = [f"Standard baseline: {std_params} params",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
              f"Total runtime: {(time.time()-t0)/60:.1f} min"]
-    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes)
+    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes,
+                         convergence_rows=conv_rows, convergence_headers=conv_headers)
     save_output(lines, OUT_FILE)
 
 

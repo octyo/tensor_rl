@@ -35,8 +35,9 @@ def main():
     ref_net    = make_net(state_dim, action_dim, 'standard', 4)
     std_params = sum(p.numel() for p in ref_net.parameters())
 
-    rows = []
-    t0   = time.time()
+    rows      = []
+    conv_rows = []
+    t0        = time.time()
 
     # Standard baseline
     print('\n  Config: standard (baseline)')
@@ -48,6 +49,7 @@ def main():
     rows.append(['standard', res['n_params'], '1.00',
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+    conv_rows.append(['standard'] + [f'{q:.3f}' for q in res['avg_quantiles']])
 
     # CP and MPS at each rank for direct comparison
     for rank in RANKS:
@@ -64,10 +66,14 @@ def main():
                 rows.append([label, res['n_params'], vs,
                              f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                              f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+                conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
             except Exception as e:
                 print(f"    ERROR: {e}")
                 rows.append([label, 'ERR', '-', '-', str(e)[:40]])
+                conv_rows.append([label] + ['-'] * 10)
 
+    pct_headers  = [f'{(i+1)*10}%' for i in range(10)]
+    conv_headers = ['Config'] + pct_headers
     headers = ['Config', 'Params', 'vs_std', 'Solve%', 'Reward']
     title   = (f"Case 6: MPS / True TT Layers  "
                f"(env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS})")
@@ -76,10 +82,10 @@ def main():
     print(f"  Total time: {(time.time()-t0)/60:.1f} min")
 
     notes = [f"Standard baseline: {std_params} params",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
              f"MPSLinear: N-core TT with bond-dim=rank, auto-factored weight shapes",
              f"Total runtime: {(time.time()-t0)/60:.1f} min"]
-    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes)
+    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes,
+                         convergence_rows=conv_rows, convergence_headers=conv_headers)
     save_output(lines, OUT_FILE)
 
 

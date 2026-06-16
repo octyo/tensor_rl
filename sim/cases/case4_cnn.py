@@ -39,8 +39,9 @@ def main():
                           network_type='standard', rank=4)
     std_params = sum(p.numel() for p in ref_net.parameters())
 
-    rows = []
-    t0   = time.time()
+    rows      = []
+    conv_rows = []
+    t0        = time.time()
 
     # Baseline: standard CNN (backbone + standard linear)
     print('\n  Config: cnn_standard (baseline)')
@@ -54,6 +55,7 @@ def main():
     rows.append(['cnn_standard', res['n_params'], vs,
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+    conv_rows.append(['cnn_standard'] + [f'{q:.3f}' for q in res['avg_quantiles']])
 
     # Tensorized CNN sweep
     for cnn_mode in CNN_MODES:
@@ -73,10 +75,14 @@ def main():
                     rows.append([label, res['n_params'], vs,
                                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                                  f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+                    conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
                 except Exception as e:
                     print(f"    ERROR: {e}")
                     rows.append([label, 'ERR', '-', '-', str(e)[:40]])
+                    conv_rows.append([label] + ['-'] * 10)
 
+    pct_headers  = [f'{(i+1)*10}%' for i in range(10)]
+    conv_headers = ['Config'] + pct_headers
     headers = ['Config', 'Params', 'vs_std', 'Solve%', 'Reward']
     title   = (f"Case 4: Tensorized CNN  "
                f"(env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS})")
@@ -87,9 +93,9 @@ def main():
 
     notes = [f"Standard flat baseline: {std_params} params",
              f"CNN obs_shape: {obs_shape}",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
              f"Total runtime: {(time.time()-t0)/60:.1f} min"]
-    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes)
+    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes,
+                         convergence_rows=conv_rows, convergence_headers=conv_headers)
     save_output(lines, OUT_FILE)
 
 

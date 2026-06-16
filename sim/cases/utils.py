@@ -30,7 +30,8 @@ ALGO       = 'double_dqn'
 # Core training loop
 # ---------------------------------------------------------------------------
 
-def _training_loop(q_net, env, n_episodes, seed, algo='dqn'):
+def _training_loop(q_net, env, n_episodes, seed, algo='dqn', label='', verbose=True):
+    import time
     from agents.dqn_agent import DQNAgent
     from agents.double_dqn_agent import DoubleDQNAgent
 
@@ -48,7 +49,10 @@ def _training_loop(q_net, env, n_episodes, seed, algo='dqn'):
         agent = DuelingDQNAgent(q_net, action_dim=action_dim,
                                 epsilon_decay_steps=eps_decay, tau=0.05)
 
-    rewards = []
+    rewards   = []
+    t_start   = time.time()
+    milestone = max(1, n_episodes // 10)   # print every 10%
+
     for ep in range(1, n_episodes + 1):
         state, _ = env.reset(seed=seed + ep)
         done, ep_rew = False, 0.0
@@ -62,13 +66,34 @@ def _training_loop(q_net, env, n_episodes, seed, algo='dqn'):
             ep_rew += r
         rewards.append(ep_rew)
 
-    final = rewards[-50:]
+        if verbose and ep % milestone == 0:
+            window = rewards[max(0, ep - milestone):]
+            pct    = ep / n_episodes * 100
+            elapsed = time.time() - t_start
+            print(f"      {pct:5.0f}%  ep={ep:4d}/{n_episodes}"
+                  f"  solve={np.mean([r > 0.5 for r in window]):.0%}"
+                  f"  reward={np.mean(window):.3f}"
+                  f"  elapsed={elapsed:.1f}s", flush=True)
+
+    final   = rewards[-50:]
+    elapsed = time.time() - t_start
+
+    # Convergence profile: mean reward in each 10% bucket of training
+    bucket = max(1, n_episodes // 10)
+    quantile_means = []
+    for i in range(10):
+        chunk = rewards[i * bucket: (i + 1) * bucket]
+        quantile_means.append(float(np.mean(chunk)) if chunk else 0.0)
+
     return {
-        'n_params':    sum(p.numel() for p in q_net.parameters()),
-        'reward_mean': float(np.mean(final)),
-        'reward_std':  float(np.std(final)),
-        'solve_rate':  float(np.mean([r > 0.5 for r in final])),
-        'q_net':       q_net,
+        'n_params':        sum(p.numel() for p in q_net.parameters()),
+        'reward_mean':     float(np.mean(final)),
+        'reward_std':      float(np.std(final)),
+        'solve_rate':      float(np.mean([r > 0.5 for r in final])),
+        'q_net':           q_net,
+        'all_rewards':     rewards,
+        'quantile_means':  quantile_means,
+        'elapsed_s':       elapsed,
     }
 
 
@@ -107,19 +132,26 @@ def run_seeds(train_fn, factory, n_episodes=N_EPISODES, seeds=SEEDS,
               algo=ALGO, label=''):
     results = []
     for seed in seeds:
+        print(f"    [{label}] seed={seed}  ({n_episodes} eps):", flush=True)
         m = train_fn(factory, n_episodes=n_episodes, seed=seed, algo=algo)
         results.append(m)
-        print(f"    [{label}] seed={seed}: "
-              f"reward={m['reward_mean']:.3f}  "
+        print(f"      -> reward={m['reward_mean']:.3f}  "
               f"solve={m['solve_rate']:.0%}  "
-              f"params={m['n_params']}")
+              f"params={m['n_params']}  "
+              f"time={m['elapsed_s']:.1f}s", flush=True)
+    # Per-seed quantile means averaged across seeds
+    n_quantiles = len(results[0]['quantile_means'])
+    avg_quantiles = [float(np.mean([r['quantile_means'][i] for r in results]))
+                     for i in range(n_quantiles)]
     return {
-        'n_params':    results[0]['n_params'],
-        'reward_mean': float(np.mean([r['reward_mean'] for r in results])),
-        'reward_std':  float(np.std([r['reward_mean'] for r in results])),
-        'solve_mean':  float(np.mean([r['solve_rate'] for r in results])),
-        'solve_std':   float(np.std([r['solve_rate'] for r in results])),
-        '_runs':       results,
+        'n_params':       results[0]['n_params'],
+        'reward_mean':    float(np.mean([r['reward_mean'] for r in results])),
+        'reward_std':     float(np.std([r['reward_mean'] for r in results])),
+        'solve_mean':     float(np.mean([r['solve_rate'] for r in results])),
+        'solve_std':      float(np.std([r['solve_rate'] for r in results])),
+        'avg_quantiles':  avg_quantiles,
+        'total_elapsed_s': float(sum(r['elapsed_s'] for r in results)),
+        '_runs':          results,
     }
 
 
@@ -172,21 +204,40 @@ def print_table(rows, headers, title=''):
     print(SEP)
 
 
-def build_output(title, env_info, rows, headers, notes=None):
-    """Build a list of lines for saving to an output file."""
+def build_output(title, env_info, rows, headers, notes=None,
+                 convergence_rows=None, convergence_headers=None):
+    """Build a list of lines for saving to an output file.
+
+    convergence_rows / convergence_headers: optional second table showing
+    per-config training curves (10% quantile buckets).
+    """
     lines = [title, env_info, '']
+    lines += [f'Environment : {ENV_ID}',
+              f'Agent       : {ALGO}',
+              f'Episodes    : {N_EPISODES} per seed   Seeds: {SEEDS}',
+              '']
     SEP = '-' * 76
 
     widths = [max(len(str(r[i])) for r in [headers] + rows) + 2
               for i in range(len(headers))]
 
-    def fmt(row):
-        return '  '.join(f'{str(v):<{w}}' for v, w in zip(row, widths))
+    def fmt(row, ws):
+        return '  '.join(f'{str(v):<{w}}' for v, w in zip(row, ws))
 
-    lines += [fmt(headers), SEP]
+    lines += [fmt(headers, widths), SEP]
     for row in rows:
-        lines.append(fmt(row))
+        lines.append(fmt(row, widths))
     lines.append(SEP)
+
+    if convergence_rows and convergence_headers:
+        lines += ['', 'Training convergence (mean reward in each 10% episode bucket):']
+        cw = [max(len(str(r[i])) for r in [convergence_headers] + convergence_rows) + 2
+              for i in range(len(convergence_headers))]
+        lines += [fmt(convergence_headers, cw), SEP]
+        for row in convergence_rows:
+            lines.append(fmt(row, cw))
+        lines.append(SEP)
+
     if notes:
         lines += [''] + notes
     return lines

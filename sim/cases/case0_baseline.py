@@ -35,7 +35,8 @@ def main():
                        network_type='standard', rank=4)
     std_params = sum(p.numel() for p in ref_net.parameters())
 
-    rows = []
+    rows      = []
+    conv_rows = []
     t0 = time.time()
 
     for hidden_sizes, label in HIDDEN_CONFIGS:
@@ -51,6 +52,10 @@ def main():
         reward_str  = f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"
         solve_str   = f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}"
         rows.append([label, res['n_params'], vs_std, solve_str, reward_str])
+        conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
+
+    pct_headers = [f'{(i+1)*10}%' for i in range(10)]
+    conv_headers = ['Config'] + pct_headers
 
     headers = ['Config', 'Params', 'vs_std', 'Solve%', 'Reward']
     title   = f"Case 0: Baseline DQN  (env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS})"
@@ -58,9 +63,9 @@ def main():
     print(f"\n  Total time: {(time.time()-t0)/60:.1f} min")
 
     notes = [f"Standard baseline: h128x128 = {std_params} params",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
              f"Total runtime: {(time.time()-t0)/60:.1f} min"]
-    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes)
+    lines = build_output(title, f"env={ENV_ID}", rows, headers, notes,
+                         convergence_rows=conv_rows, convergence_headers=conv_headers)
     save_output(lines, OUT_FILE)
 
 

@@ -128,7 +128,7 @@ def main():
 
     notes = [f"Standard pre-compress: {std_params} params, "
              f"reward={pre_reward_mean:.3f}, solve={pre_solve_mean:.0%}",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
+             f"Convergence note: post-hoc compression — no training curve (eval only)",
              f"Total runtime: {(time.time()-t0)/60:.1f} min"]
     lines = build_output(title, f"env={ENV_ID}", rows, headers, notes)
     save_output(lines, OUT_FILE)

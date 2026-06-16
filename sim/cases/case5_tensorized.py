@@ -38,8 +38,9 @@ def main():
     ref_net    = make_net(state_dim, action_dim, 'standard', 4)
     std_params = sum(p.numel() for p in ref_net.parameters())
 
-    all_rows = []
-    t0       = time.time()
+    all_rows      = []
+    all_conv_rows = []
+    t0            = time.time()
 
     # --- Sub-experiment A: all types at fixed rank ---
     print(f'\n{"="*60}')
@@ -60,6 +61,7 @@ def main():
         rows_a.append([label, res['n_params'], vs,
                        f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                        f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+        all_conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
     all_rows.extend(rows_a)
 
     headers = ['Config', 'Params', 'vs_std', 'Solve%', 'Reward']
@@ -86,9 +88,11 @@ def main():
                 rows_b.append([label, res['n_params'], vs,
                                f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
                                f"{res['reward_mean']:.3f} +/- {res['reward_std']:.3f}"])
+                all_conv_rows.append([label] + [f'{q:.3f}' for q in res['avg_quantiles']])
             except Exception as e:
                 print(f"    ERROR: {e}")
                 rows_b.append([label, 'ERR', '-', '-', str(e)[:40]])
+                all_conv_rows.append([label] + ['-'] * 10)
     all_rows.extend(rows_b)
 
     print_table(rows_b, headers,
@@ -98,12 +102,14 @@ def main():
     print(f"\n  Standard baseline: {std_params} params")
     print(f"  Total time: {elapsed:.1f} min")
 
+    pct_headers  = [f'{(i+1)*10}%' for i in range(10)]
+    conv_headers = ['Config'] + pct_headers
     title = (f"Case 5: All Tensorized Types  "
              f"(env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS})")
     notes = [f"Standard baseline: {std_params} params",
-             f"env={ENV_ID}, episodes={N_EPISODES}, seeds={SEEDS}, algo={ALGO}",
              f"Total runtime: {elapsed:.1f} min"]
-    lines = build_output(title, f"env={ENV_ID}", all_rows, headers, notes)
+    lines = build_output(title, f"env={ENV_ID}", all_rows, headers, notes,
+                         convergence_rows=all_conv_rows, convergence_headers=conv_headers)
     save_output(lines, OUT_FILE)
 
 
