@@ -41,9 +41,10 @@ mkdir -p "$REPO/sim/hpc/logs"
 #   - needs: python3 with numpy, gymnasium, minigrid, matplotlib
 #   - needs: ffmpeg on PATH for the videos (else pass --no-videos below)
 # ---------------------------------------------------------------------------
-# module load python3/3.11.9
-# module load ffmpeg/6.1                 # for video rendering
-# source $HOME/tensor_rl/code/venv/bin/activate
+module load python3/3.11.9               # DTU HPC python (3.11 supports the type syntax)
+# module load ffmpeg/6.1                  # uncomment for video rendering, else use --no-videos
+# source $HOME/tensor_rl/code/venv/bin/activate   # or a venv with the deps
+# deps needed: numpy gymnasium minigrid matplotlib  (pip install --user ... if no venv)
 PYTHON=${PYTHON:-python3}
 
 # ---------------------------------------------------------------------------
