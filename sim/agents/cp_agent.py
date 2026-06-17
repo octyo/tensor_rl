@@ -113,7 +113,8 @@ class CPGridQAgent:
     def __init__(self, rows: int, cols: int, rank: int = 4,
                  lr: float = 0.4, gamma: float = 0.99,
                  epsilon_start: float = 1.0, epsilon_min: float = 0.05,
-                 epsilon_decay: float = 0.995):
+                 epsilon_decay: float = 0.995,
+                 target_update_freq: int = 200):
         self.rows = rows
         self.cols = cols
         self.rank = rank
@@ -122,12 +123,15 @@ class CPGridQAgent:
         self.epsilon = epsilon_start
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
+        self.target_update_freq = target_update_freq
+        self._step = 0
 
         N = 3  # row, col, action axes
         sigma = rank ** (-1.0 / (2 * N))
         axis_sizes = [rows, cols, NUM_ACTIONS]
         self.factors = [np.random.normal(0.0, sigma, (size, rank))
                         for size in axis_sizes]
+        self.target_factors = [f.copy() for f in self.factors]
 
     @property
     def param_count(self) -> int:
@@ -148,16 +152,33 @@ class CPGridQAgent:
             return random.randint(0, NUM_ACTIONS - 1)
         return int(np.argmax(self._q_all_actions(state)))
 
+    def _q_all_actions_target(self, state: tuple) -> np.ndarray:
+        """Q[state, :] for all actions using frozen target factors."""
+        r, c = state
+        h = self.target_factors[0][r] * self.target_factors[1][c]
+        return h @ self.target_factors[2].T
+
     def update(self, state: tuple, action: int, reward: float,
                next_state: tuple, done: bool) -> float:
-        """Algorithm 1, lines 11-19: compute TD target then NLMS update."""
+        """Algorithm 1, lines 11-19: compute TD target then NLMS update.
+
+        Bootstrap value is read from frozen target_factors to break the
+        deadly-triad feedback loop. Target factors are synced every
+        target_update_freq steps.
+        """
         if done:
             target = reward
         else:
-            target = reward + self.gamma * float(np.max(self._q_all_actions(next_state)))
+            target = reward + self.gamma * float(np.max(self._q_all_actions_target(next_state)))
 
         sa_index = (state[0], state[1], action)
-        return td_update(self.factors, sa_index, target, self.lr)
+        delta = td_update(self.factors, sa_index, target, self.lr)
+
+        self._step += 1
+        if self._step % self.target_update_freq == 0:
+            self.target_factors = [f.copy() for f in self.factors]
+
+        return delta
 
     def decay_epsilon(self):
         """Algorithm 1, line 21: multiplicative decay at end of each episode."""
@@ -222,6 +243,7 @@ def run_experiment(rows: int = 5, cols: int = 5, rank: int = 4,
                    lr: float = 0.4, gamma: float = 0.99,
                    epsilon_start: float = 1.0, epsilon_min: float = 0.05,
                    epsilon_decay: float = 0.995,
+                   target_update_freq: int = 200,
                    q_star: np.ndarray | None = None,
                    verbose: bool = True) -> dict:
     """Run CP Q-learning at a single rank over n_seeds random seeds.
@@ -252,6 +274,7 @@ def run_experiment(rows: int = 5, cols: int = 5, rank: int = 4,
             "lr": lr, "gamma": gamma,
             "epsilon_start": epsilon_start, "epsilon_min": epsilon_min,
             "epsilon_decay": epsilon_decay,
+            "target_update_freq": target_update_freq,
         },
         "q_star": q_star.tolist(),
         "rank": rank,
@@ -265,7 +288,8 @@ def run_experiment(rows: int = 5, cols: int = 5, rank: int = 4,
         agent = CPGridQAgent(rows, cols, rank=rank, lr=lr, gamma=gamma,
                              epsilon_start=epsilon_start,
                              epsilon_min=epsilon_min,
-                             epsilon_decay=epsilon_decay)
+                             epsilon_decay=epsilon_decay,
+                             target_update_freq=target_update_freq)
         metrics = train_agent(agent, env, n_episodes=n_episodes, q_star=q_star)
         results["seeds"].append(metrics)
 
@@ -286,6 +310,7 @@ def run_rank_sweep(rows: int = 5, cols: int = 5,
                    lr: float = 0.4, gamma: float = 0.99,
                    epsilon_start: float = 1.0, epsilon_min: float = 0.05,
                    epsilon_decay: float = 0.995,
+                   target_update_freq: int = 200,
                    verbose: bool = True) -> dict:
     """Sweep CP rank and collect metrics for comparison with the tabular baseline.
 
@@ -318,6 +343,7 @@ def run_rank_sweep(rows: int = 5, cols: int = 5,
             lr=lr, gamma=gamma,
             epsilon_start=epsilon_start, epsilon_min=epsilon_min,
             epsilon_decay=epsilon_decay,
+            target_update_freq=target_update_freq,
             q_star=q_star, verbose=verbose,
         )
         if verbose:
@@ -342,7 +368,8 @@ def _parse_args():
     p.add_argument("--gamma",     type=float, default=0.99)
     p.add_argument("--eps-start", type=float, default=1.0,   dest="epsilon_start")
     p.add_argument("--eps-min",   type=float, default=0.05,  dest="epsilon_min")
-    p.add_argument("--eps-decay", type=float, default=0.995, dest="epsilon_decay")
+    p.add_argument("--eps-decay",      type=float, default=0.995, dest="epsilon_decay")
+    p.add_argument("--target-update",  type=int,   default=200,   dest="target_update_freq")
     p.add_argument("--save", type=str,
                    default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         '..', 'data', 'cp_rank_sweep_results.json'))
@@ -370,6 +397,7 @@ if __name__ == "__main__":
         epsilon_start=args.epsilon_start,
         epsilon_min=args.epsilon_min,
         epsilon_decay=args.epsilon_decay,
+        target_update_freq=args.target_update_freq,
     )
 
     os.makedirs(os.path.dirname(args.save), exist_ok=True)
