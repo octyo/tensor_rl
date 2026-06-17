@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.tabular_baseline import TabularGridQAgent, value_iteration_q
-from agents.cp_agent import CPGridQAgent
+from agents.cp_agent import CPGridQAgent, CPTargetGridQAgent
 from envs.gridworld import GridWorld, NUM_ACTIONS
 from rank_analysis import cp_capture_curve, plot_capture_panel
 
@@ -144,6 +144,10 @@ def make_agent(kind: str, rows: int, cols: int, rank: int,
     elif kind == "cp":
         agent = CPGridQAgent(rows, cols, rank=rank, lr=cp_lr, gamma=GAMMA,
                              epsilon_decay=epsilon_decay)
+        return agent, (lambda r, c: agent._q_all_actions((r, c)))
+    elif kind == "cp_target":
+        agent = CPTargetGridQAgent(rows, cols, rank=rank, lr=cp_lr, gamma=GAMMA,
+                                   epsilon_decay=epsilon_decay)
         return agent, (lambda r, c: agent._q_all_actions((r, c)))
     raise ValueError(kind)
 
