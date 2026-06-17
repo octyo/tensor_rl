@@ -20,9 +20,20 @@
 
 set -euo pipefail
 
-# Repo root: defaults to the directory you ran `bsub` from (LSF's LS_SUBCWD).
-# If you submit from somewhere else, export REPO=/path/to/tensor_rl before bsub.
-REPO="${REPO:-${LS_SUBCWD:-$PWD}}"
+# Repo root. Works regardless of which directory you ran `bsub` from: start at
+# the submission dir (LS_SUBCWD) and walk up until we find sim/obstacle_lab.py.
+# Override by exporting REPO=/path/to/tensor_rl before bsub if you prefer.
+if [ -z "${REPO:-}" ]; then
+    REPO="${LS_SUBCWD:-$PWD}"
+    while [ "$REPO" != "/" ] && [ ! -f "$REPO/sim/obstacle_lab.py" ]; do
+        REPO="$(dirname "$REPO")"
+    done
+fi
+if [ ! -f "$REPO/sim/obstacle_lab.py" ]; then
+    echo "ERROR: could not locate repo root (no sim/obstacle_lab.py under $REPO)." >&2
+    echo "       export REPO=/path/to/tensor_rl before submitting." >&2
+    exit 1
+fi
 mkdir -p "$REPO/sim/hpc/logs"
 
 # ---------------------------------------------------------------------------
