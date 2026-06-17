@@ -320,7 +320,15 @@ def main():
     p.add_argument("--map", action="store_true", help="only render the map overview")
     p.add_argument("--videos-only", action="store_true",
                    help="regenerate only the videos in existing folders")
+    p.add_argument("--spawn", choices=["random", "fixed", "both"], default="both",
+                   help="which start regime(s) to run (one per HPC task)")
+    p.add_argument("--no-videos", action="store_true",
+                   help="skip video rendering (e.g. if ffmpeg is unavailable)")
     args = p.parse_args()
+
+    spawn_list = [("random", True), ("fixed", False)]
+    if args.spawn != "both":
+        spawn_list = [(s, r) for (s, r) in spawn_list if s == args.spawn]
 
     global WALLS_OVERRIDE
     grid, layout, E = args.size, args.layout, args.episodes
@@ -348,7 +356,7 @@ def main():
 
     # videos-only: regenerate both videos in the existing folders, skip everything else
     if args.videos_only:
-        for spawn, rstart in [("random", True), ("fixed", False)]:
+        for spawn, rstart in spawn_list:
             out = folder(spawn)
             print(f"\n=== {layout} / {spawn} videos -> {out} ===", flush=True)
             make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
@@ -360,7 +368,7 @@ def main():
     print("Rank capture ...", flush=True)
     cap = cp_capture_curve(q_star, sorted(set([1, 2, 3, 6, 12, 20, 30] + args.ranks)))
 
-    for spawn, rstart in [("random", True), ("fixed", False)]:
+    for spawn, rstart in spawn_list:
         out = folder(spawn)
         print(f"\n=== {layout} / {spawn} -> {out} ===")
         eval_env = make_env(grid, rstart)
@@ -409,10 +417,11 @@ def main():
         print(f"  [OK] policymaps.png")
 
         # convergence videos (3-panel + multi-rank)
-        print(f"  rendering videos ...", flush=True)
-        make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
-                    args.ranks, args.video_rank, E, args.snap_every,
-                    args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
+        if not args.no_videos:
+            print(f"  rendering videos ...", flush=True)
+            make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
+                        args.ranks, args.video_rank, E, args.snap_every,
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
         print(f"  [OK] all artifacts in {out}")
 
 
