@@ -47,6 +47,11 @@ module load python3/3.11.9               # DTU HPC python (3.11 supports the typ
 # deps needed: numpy gymnasium minigrid matplotlib  (pip install --user ... if no venv)
 PYTHON=${PYTHON:-python3}
 
+# Each task is single-threaded (pure-Python training + tiny numpy arrays), so we
+# request -n 1 and pin the BLAS libs to 1 thread to avoid oversubscribing it.
+# Parallelism comes from the job array (58 tasks run concurrently), not per-task cores.
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+
 # ---------------------------------------------------------------------------
 # Map $LSB_JOBINDEX -> a single (size, layout, spawn, episodes, ...) config.
 # The same list is generated deterministically here and in list_configs.py;
