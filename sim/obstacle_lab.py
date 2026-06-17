@@ -18,6 +18,7 @@ Run:
 """
 
 import argparse
+import json
 import os
 import random
 import sys
@@ -415,6 +416,20 @@ def main():
         plt.savefig(os.path.join(out, "policymaps.png"), dpi=110, bbox_inches="tight")
         plt.close(fig)
         print(f"  [OK] policymaps.png")
+
+        # machine-readable metrics for cross-run aggregation (summary.py)
+        def _ser(c):
+            return {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in c.items()}
+        metrics = {
+            "layout": layout, "size": grid, "episodes": E, "spawn": spawn,
+            "tab_params": tab_params, "opt_return": opt_ret,
+            "rank_capture": cap, "ranks": list(args.ranks),
+            "configs": [_ser(c) for c in configs],
+            "final_acc": {c["label"]: float(c["acc_mean"][-1]) for c in configs},
+        }
+        with open(os.path.join(out, "metrics.json"), "w") as f:
+            json.dump(metrics, f, indent=2)
+        print(f"  [OK] metrics.json")
 
         # convergence videos (3-panel + multi-rank)
         if not args.no_videos:

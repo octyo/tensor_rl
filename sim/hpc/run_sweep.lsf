@@ -19,7 +19,11 @@
 #BSUB -e sim/hpc/logs/%J_%I.err
 
 set -euo pipefail
-mkdir -p sim/hpc/logs
+
+# Repo root: defaults to the directory you ran `bsub` from (LSF's LS_SUBCWD).
+# If you submit from somewhere else, export REPO=/path/to/tensor_rl before bsub.
+REPO="${REPO:-${LS_SUBCWD:-$PWD}}"
+mkdir -p "$REPO/sim/hpc/logs"
 
 # ---------------------------------------------------------------------------
 # Environment. EDIT THESE for your HPC account.
@@ -56,8 +60,7 @@ PY
 
 echo "[task $LSB_JOBINDEX] size=$SIZE layout=$LAYOUT spawn=$SPAWN episodes=$EPISODES"
 
-cd "$(dirname "$0")/../.."        # repo root
-cd sim
+cd "$REPO/sim"
 
 $PYTHON obstacle_lab.py \
     --layout "$LAYOUT" --size "$SIZE" --spawn "$SPAWN" \
