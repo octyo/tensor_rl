@@ -23,7 +23,6 @@ wall geometry.
   SimpleEnv (door+key)             - (kept as a real MiniGrid env)
 """
 
-from __future__ import annotations
 
 import math
 from collections import deque
