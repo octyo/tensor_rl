@@ -294,23 +294,27 @@ def _render_video(panels, q_star, opt_mask, grid, vmin, vmax,
 
 
 def make_videos(out, grid, random_start, q_star, opt_mask, vmin, vmax,
-                ranks, video_rank, n_episodes, snap_every, max_steps, fps, title):
-    """Two videos from a single training pass per agent:
-       video.mp4        OPTIMAL | TABULAR | CP rank=video_rank   (easy to read)
-       video_multi.mp4  OPTIMAL | TABULAR | CP for every rank    (more heatmaps)
+                ranks, video_rank, n_episodes, snap_every, max_steps, fps, title,
+                variants=("nlms",)):
+    """Two videos from a single training pass per agent, comparing CP variants:
+       video.mp4        OPTIMAL | TABULAR | <each variant at video_rank>
+       video_multi.mp4  OPTIMAL | TABULAR | <each variant at every rank>
     """
+    variant_kind = {"nlms": "cp", "target": "cp_target"}
+    variant_tag = {"nlms": "CP", "target": "CP-tgt"}
     snaps = {("tabular", 0): _video_snapshots(grid, "tabular", 0, random_start,
                                               n_episodes, snap_every, max_steps)}
-    for rk in sorted(set(ranks) | {video_rank}):
-        snaps[("cp", rk)] = _video_snapshots(grid, "cp", rk, random_start,
-                                             n_episodes, snap_every, max_steps)
-    _render_video([("TABULAR", snaps[("tabular", 0)]),
-                   (f"CP rank={video_rank}", snaps[("cp", video_rank)])],
-                  q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes, fps,
+    for v in variants:
+        for rk in sorted(set(ranks) | {video_rank}):
+            snaps[(v, rk)] = _video_snapshots(grid, variant_kind[v], rk, random_start,
+                                              n_episodes, snap_every, max_steps)
+    easy = [("TABULAR", snaps[("tabular", 0)])]
+    easy += [(f"{variant_tag[v]} r{video_rank}", snaps[(v, video_rank)]) for v in variants]
+    _render_video(easy, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes, fps,
                   os.path.join(out, "video.mp4"), title)
-    panels = [("TABULAR", snaps[("tabular", 0)])] + \
-             [(f"CP rank={rk}", snaps[("cp", rk)]) for rk in ranks]
-    _render_video(panels, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes,
+    multi = [("TABULAR", snaps[("tabular", 0)])]
+    multi += [(f"{variant_tag[v]} r{rk}", snaps[(v, rk)]) for v in variants for rk in ranks]
+    _render_video(multi, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes,
                   fps, os.path.join(out, "video_multi.mp4"), title)
 
 
@@ -396,7 +400,8 @@ def main():
             print(f"\n=== {layout} / {spawn} videos -> {out} ===", flush=True)
             make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
                         args.ranks, args.video_rank, E, args.snap_every,
-                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}",
+                        variants=args.cp_variants)
         return
 
     # spawn-independent: rank-capture curve (compute once, drop into both folders)
@@ -474,7 +479,8 @@ def main():
             print(f"  rendering videos ...", flush=True)
             make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
                         args.ranks, args.video_rank, E, args.snap_every,
-                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}",
+                        variants=args.cp_variants)
         print(f"  [OK] all artifacts in {out}")
 
 
