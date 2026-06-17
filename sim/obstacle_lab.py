@@ -36,13 +36,13 @@ from envs.gridworld import NUM_ACTIONS, _DELTA
 from envs.obstacle_gridworld import ObstacleGridWorld
 from rank_analysis import cp_capture_curve, plot_capture_panel
 from cp_speedup_experiment import make_agent, GAMMA, TAB_LR, CP_LR, EPSILON_DECAY
-from envs.obstacle_minigrid import LAYOUTS
+from envs.minigrid import LAYOUTS
 
 # new convention: all data under sim/data, one self-contained folder per config
 DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                           "data", "obstacle_report")
-ENV_NAME = "gridworld"
+ENV_NAME = "minigrid"
 CMAP = "viridis"
 TAB_COLOR = "#d62728"
 CP_COLORS = ["#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e"]
@@ -216,49 +216,70 @@ def plot_curves(configs, opt_return, out_path, title):
 
 # ── convergence video ────────────────────────────────────────────────────────
 
-def make_video(grid, rank, random_start, q_star, opt_mask, vmin, vmax,
-               n_episodes, snap_every, max_steps, fps, out_path, regime_label):
-    def snapshots(kind):
-        random.seed(0); np.random.seed(0)
-        env = make_env(grid, random_start)
-        agent, _ = make_agent(kind, grid, grid, rank, TAB_LR, CP_LR, EPSILON_DECAY)
-        snaps = []
-        dense = lambda: agent.Q if kind == "tabular" else agent.to_dense()
-        snaps.append(dense().copy())
-        for ep in range(n_episodes):
-            s = env.reset()
-            for _ in range(max_steps):
-                a = agent.select_action(s); ns, r, d = env.step(a)
-                agent.update(s, a, r, ns, d); s = ns
-                if d:
-                    break
-            agent.decay_epsilon()
-            if (ep + 1) % snap_every == 0:
-                snaps.append(dense().copy())
-        return snaps
-    tab, cp = snapshots("tabular"), snapshots("cp")
-    n = min(len(tab), len(cp))
-    eval_env = make_env(grid, False)
+def _video_snapshots(grid, kind, rank, random_start, n_episodes, snap_every, max_steps):
+    """Train one agent, snapshotting its dense Q every snap_every episodes."""
+    random.seed(0); np.random.seed(0)
+    env = make_env(grid, random_start)
+    agent, _ = make_agent(kind, grid, grid, rank, TAB_LR, CP_LR, EPSILON_DECAY)
+    dense = lambda: agent.Q if kind == "tabular" else agent.to_dense()
+    snaps = [dense().copy()]
+    for ep in range(n_episodes):
+        s = env.reset()
+        for _ in range(max_steps):
+            a = agent.select_action(s); ns, r, d = env.step(a)
+            agent.update(s, a, r, ns, d); s = ns
+            if d:
+                break
+        agent.decay_epsilon()
+        if (ep + 1) % snap_every == 0:
+            snaps.append(dense().copy())
+    return snaps
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 7))
+
+def _render_video(panels, q_star, opt_mask, grid, vmin, vmax,
+                  snap_every, n_episodes, fps, out_path, title):
+    """panels: list of (label, snaps). Renders OPTIMAL + each panel as a heatmap."""
+    eval_env = make_env(grid, False)
+    n = min(len(s) for _, s in panels)
+    ncol = 1 + len(panels)
+    fig, axes = plt.subplots(1, ncol, figsize=(6.5 * ncol, 7))
     draw_policy_map(axes[0], lambda r, c: q_star[r, c], eval_env, opt_mask,
                     "OPTIMAL", vmin, vmax, show_path=True)
     sm = ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=CMAP)
-    fig.colorbar(sm, ax=axes, fraction=0.025, pad=0.02, label="learned V(s)")
+    fig.colorbar(sm, ax=axes, fraction=0.02, pad=0.02, label="learned V(s)")
     sup = fig.suptitle("", fontsize=14, fontweight="bold")
 
     def update(i):
-        draw_policy_map(axes[1], lambda r, c: tab[i][r, c], eval_env, opt_mask,
-                        "TABULAR", vmin, vmax, show_path=True)
-        draw_policy_map(axes[2], lambda r, c: cp[i][r, c], eval_env, opt_mask,
-                        f"CP rank={rank}", vmin, vmax, show_path=True)
-        sup.set_text(f"Maze policy convergence ({regime_label})  —  "
-                     f"episode {i*snap_every} / {n_episodes}")
+        for ax, (lbl, snaps) in zip(axes[1:], panels):
+            draw_policy_map(ax, lambda r, c: snaps[i][r, c], eval_env, opt_mask,
+                            lbl, vmin, vmax, show_path=True)
+        sup.set_text(f"{title}  —  episode {i*snap_every} / {n_episodes}")
         return axes
     anim = animation.FuncAnimation(fig, update, frames=n, blit=False)
     anim.save(out_path, writer=animation.FFMpegWriter(fps=fps, bitrate=2400), dpi=90)
     plt.close(fig)
-    print(f"  [OK] {out_path}  ({n} frames)")
+    print(f"  [OK] {os.path.basename(out_path)}  ({n} frames, {ncol} panels)")
+
+
+def make_videos(out, grid, random_start, q_star, opt_mask, vmin, vmax,
+                ranks, video_rank, n_episodes, snap_every, max_steps, fps, title):
+    """Two videos from a single training pass per agent:
+       video.mp4        OPTIMAL | TABULAR | CP rank=video_rank   (easy to read)
+       video_multi.mp4  OPTIMAL | TABULAR | CP for every rank    (more heatmaps)
+    """
+    snaps = {("tabular", 0): _video_snapshots(grid, "tabular", 0, random_start,
+                                              n_episodes, snap_every, max_steps)}
+    for rk in sorted(set(ranks) | {video_rank}):
+        snaps[("cp", rk)] = _video_snapshots(grid, "cp", rk, random_start,
+                                             n_episodes, snap_every, max_steps)
+    _render_video([("TABULAR", snaps[("tabular", 0)]),
+                   (f"CP rank={video_rank}", snaps[("cp", video_rank)])],
+                  q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes, fps,
+                  os.path.join(out, "video.mp4"), title)
+    panels = [("TABULAR", snaps[("tabular", 0)])] + \
+             [(f"CP rank={rk}", snaps[("cp", rk)]) for rk in ranks]
+    _render_video(panels, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes,
+                  fps, os.path.join(out, "video_multi.mp4"), title)
 
 
 # ── driver ───────────────────────────────────────────────────────────────────
@@ -297,6 +318,8 @@ def main():
     p.add_argument("--fps", type=int, default=15)
     p.add_argument("--video-rank", type=int, default=6)
     p.add_argument("--map", action="store_true", help="only render the map overview")
+    p.add_argument("--videos-only", action="store_true",
+                   help="regenerate only the videos in existing folders")
     args = p.parse_args()
 
     global WALLS_OVERRIDE
@@ -322,6 +345,16 @@ def main():
         _save_map(q_star, base_env, opt_mask, vmin, vmax, layout, grid,
                   os.path.join(folder("random"), "map.png"))
         print("[OK] map only"); return
+
+    # videos-only: regenerate both videos in the existing folders, skip everything else
+    if args.videos_only:
+        for spawn, rstart in [("random", True), ("fixed", False)]:
+            out = folder(spawn)
+            print(f"\n=== {layout} / {spawn} videos -> {out} ===", flush=True)
+            make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
+                        args.ranks, args.video_rank, E, args.snap_every,
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
+        return
 
     # spawn-independent: rank-capture curve (compute once, drop into both folders)
     print("Rank capture ...", flush=True)
@@ -375,11 +408,11 @@ def main():
         plt.close(fig)
         print(f"  [OK] policymaps.png")
 
-        # convergence video
-        print(f"  rendering video ...", flush=True)
-        make_video(grid, args.video_rank, rstart, q_star, opt_mask, vmin, vmax,
-                   E, args.snap_every, args.max_steps, args.fps,
-                   os.path.join(out, "video.mp4"), f"{layout} {spawn}")
+        # convergence videos (3-panel + multi-rank)
+        print(f"  rendering videos ...", flush=True)
+        make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
+                    args.ranks, args.video_rank, E, args.snap_every,
+                    args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
         print(f"  [OK] all artifacts in {out}")
 
 
