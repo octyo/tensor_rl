@@ -18,6 +18,8 @@ Run standalone for a rank sweep and comparison with the tabular baseline:
     python cp_agent.py --ranks 1 2 4 8 16 --episodes 2000 --seeds 5
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os

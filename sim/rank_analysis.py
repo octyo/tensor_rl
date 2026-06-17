@@ -17,6 +17,8 @@ Standalone: prints a table and saves a "% captured vs rank" figure.
     python rank_analysis.py --grid 20 --ranks 1 2 3 4 6 8 10 12
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys
