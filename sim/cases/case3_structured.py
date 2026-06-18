@@ -8,7 +8,7 @@ TuckerEmbedding as the first layer.
 
 Sweep: embedding_type in [tt, cp, tucker]  x  rank in [2, 4, 8, 16]
 Baseline: standard DQN on flattened obs
-Seeds: 3  |  Episodes: 200  |  Algo: DQN
+Seeds: 7  |  Episodes: 200  |  Algo: DQN
 """
 
 import sys, os, time
@@ -22,9 +22,11 @@ from utils import (ENV_ID, N_EPISODES, SEEDS, ALGO,
                    print_table, build_output, save_output)
 from models.q_networks import QNetwork, StructuredQNetwork
 
-METHODS  = ['tt', 'cp', 'tucker']
-RANKS    = [2, 4, 8, 16]
-OUT_FILE = os.path.join(os.path.dirname(__file__), 'case3_structured_output.txt')
+METHODS    = ['tt', 'cp', 'tucker']
+RANKS      = [2, 4, 8, 16]
+SEEDS      = [42, 43, 44, 45, 46, 47, 48]
+N_EPISODES = 200
+OUT_FILE   = os.path.join(os.path.dirname(__file__), 'case3_structured_output.txt')
 
 
 def main():
@@ -52,6 +54,7 @@ def main():
                         network_type='standard', rank=4)
 
     res = run_seeds(train_flat, std_factory, label='standard',
+                    n_episodes=N_EPISODES, seeds=SEEDS,
                     config_idx=config_idx, config_total=n_configs, experiment_t0=t0)
     rows.append(['standard', res['n_params'], '1.00',
                  f"{res['solve_mean']:.0%} +/- {res['solve_std']:.0%}",
@@ -73,6 +76,7 @@ def main():
 
             try:
                 res = run_seeds(train_structured, factory, label=label,
+                                n_episodes=N_EPISODES, seeds=SEEDS,
                                 config_idx=config_idx, config_total=n_configs,
                                 experiment_t0=t0)
                 vs  = f"{res['n_params'] / std_params:.3f}"
