@@ -18,8 +18,17 @@ import numpy as np
 ACTIONS = ["turn left", "turn right", "move forward"]
 N_STATES = 10
 
-# Heat-map ramp (low -> high Q-value).
-_RAMP = color_gradient([BLUE_E, TEAL_D, GREEN_D, YELLOW_E, GOLD_B], 256)
+# Heat-map ramp (low -> high Q-value): saturated red -> yellow -> green, drawn
+# semi-transparent.  (Routed through yellow so mid values stay vivid, not muddy.)
+_RAMP = color_gradient(["#E23B3B", "#F2C13E", "#34C24E"], 256)
+_CELL_OPACITY = 0.4   # glassy: let the background blend through
+
+# States laid out on a grid; this width maps a state index -> (x, y) coord.
+_GRID_W = 5
+
+# Border colour marking the greedy / optimal action.  Placeholder for now —
+# a cool tone that reads clearly against the warm green<->red cells.
+_POLICY_COLOR = "#2E8BFF"
 
 
 def _value_color(t):
@@ -51,12 +60,10 @@ class QTable(Scene):
                 t = (q[i, j] - lo) / (hi - lo)
                 cell = Rectangle(
                     width=cw, height=ch,
-                    fill_color=_value_color(t), fill_opacity=0.95,
-                    stroke_color=GREY_D, stroke_width=1.0,
-                )
-                cell.move_to([j * cw, -i * ch, 0])
-                txt = Text(f"{q[i, j]:.1f}", font_size=20,
-                           color=BLACK if t > 0.5 else WHITE)
+                    fill_color=_value_color(t), fill_opacity=_CELL_OPACITY,
+                    stroke_color=GREY_B, stroke_width=1.2,
+                ).move_to([j * cw, -i * ch, 0])
+                txt = Text(f"{q[i, j]:.1f}", font_size=20, color=WHITE)
                 txt.move_to(cell)
                 cells[(i, j)] = cell
                 grid.add(cell, txt)
@@ -66,7 +73,7 @@ class QTable(Scene):
         for i in range(rows):
             j = int(np.argmax(q[i]))
             box = cells[(i, j)].copy().set_fill(opacity=0)
-            box.set_stroke(GOLD_A, width=3.5)
+            box.set_stroke(_POLICY_COLOR, width=3.5)
             greedy.add(box)
 
         # ── column headers (actions) ─────────────────────────────────────────
@@ -76,17 +83,18 @@ class QTable(Scene):
             h.move_to([j * cw, ch * 0.5 + 0.45, 0])
             headers.add(h)
 
-        # ── row labels (states) ──────────────────────────────────────────────
+        # ── row labels (states as s_i : (x, y) grid coordinates) ─────────────
         row_labels = VGroup()
         for i in range(rows):
-            lbl = MathTex(f"s_{{{i + 1}}}", font_size=26)
-            lbl.move_to([-cw * 0.5 - 0.45, -i * ch, 0])
+            x, y = i % _GRID_W, i // _GRID_W
+            lbl = MathTex(rf"s_{{{i + 1}}}\colon ({x},\,{y})", font_size=24)
+            lbl.next_to(cells[(i, 0)], LEFT, buff=0.35)
             row_labels.add(lbl)
 
         table = VGroup(grid, greedy, headers, row_labels)
 
         # ── braces with S / A labels ─────────────────────────────────────────
-        rb = Brace(VGroup(*[cells[(i, 0)] for i in range(rows)]), LEFT, buff=0.85)
+        rb = Brace(row_labels, LEFT, buff=0.3)
         rb_lbl = rb.get_tex("S").scale(1.0)
         cb = Brace(VGroup(*[cells[(0, j)] for j in range(cols)]), UP, buff=0.95)
         cb_lbl = cb.get_tex("A").scale(1.0)
@@ -96,7 +104,7 @@ class QTable(Scene):
         full = VGroup(table, braces)
         caption = VGroup(
             MathTex(r"Q(s, a)\;\in\;\mathbb{R}^{S \times A}", font_size=40),
-            Text("greedy policy:  argmaxₐ Q(s, a)", font_size=22, color=GOLD_A),
+            Text("greedy policy:  argmaxₐ Q(s, a)", font_size=22, color=_POLICY_COLOR),
         ).arrange(DOWN, buff=0.18)
         caption.next_to(full, DOWN, buff=0.55)
 
