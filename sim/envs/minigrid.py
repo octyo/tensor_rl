@@ -90,6 +90,28 @@ def _connected_to_goal(walls, size):
     return len(seen) == len(free)
 
 
+def _component(seed, walls, size):
+    """Free cells reachable from seed (4-connected)."""
+    if seed in walls:
+        return set()
+    seen = {seed}; q = deque(seen)
+    while q:
+        r, c = q.popleft()
+        for dr, dc in _DELTA.values():
+            nb = (r + dr, c + dc)
+            if (0 <= nb[0] < size and 0 <= nb[1] < size
+                    and nb not in walls and nb not in seen):
+                seen.add(nb); q.append(nb)
+    return seen
+
+
+def _start_reaches_goal(walls, size):
+    """True if (0,0) can reach the bottom-right goal over free cells."""
+    if (0, 0) in walls or (size - 1, size - 1) in walls:
+        return False
+    return (size - 1, size - 1) in _component((0, 0), walls, size)
+
+
 def island_walls(size, n_islands=None, seed=1, max_block=2):
     if n_islands is None:
         n_islands = max(8, round(size * size * 0.07))
@@ -141,7 +163,28 @@ def swirl_walls(size):
     w = big | blade
     w |= {(c, r) for (r, c) in w}                     # main-diagonal symmetry
     w.discard((0, 0)); w.discard((size - 1, size - 1))
-    return frozenset((r, c) for (r, c) in w if 0 <= r < size and 0 <= c < size)
+    w = {(r, c) for (r, c) in w if 0 <= r < size and 0 <= c < size}
+    # On small grids the blades close into an L that seals the goal corner. Punch
+    # the doorway at the INNER end (nearest the bend) so the blades still reach the
+    # grid edges, and keep it diagonal-symmetric. No-op once the grid is large
+    # enough to be solvable, so bigger swirls are unchanged.
+    goal = (size - 1, size - 1)
+    while not _start_reaches_goal(w, size):
+        Rs = _component((0, 0), w, size)
+        Rg = _component(goal, w, size)
+        frontier = [(r, c) for (r, c) in w
+                    if any((r + dr, c + dc) in Rs for dr, dc in _DELTA.values())
+                    and any((r + dr, c + dc) in Rg for dr, dc in _DELTA.values())]
+        if not frontier:
+            break
+        inner = min(r + c for (r, c) in frontier)            # nearest the bend/center
+        drop = {(r, c) for (r, c) in frontier if r + c == inner}
+        drop |= {(c, r) for (r, c) in drop}                  # keep diagonal symmetry
+        drop &= w
+        if not drop:
+            break
+        w -= drop
+    return frozenset(w)
 
 
 # ── real MiniGrid env layouts ────────────────────────────────────────────────
