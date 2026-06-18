@@ -14,6 +14,7 @@ are marked N/A.
 import argparse
 import os
 import sys
+from collections import deque
 
 import numpy as np
 import matplotlib
@@ -23,7 +24,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.tabular_baseline import value_iteration_q
 from envs.gridworld import _DELTA
-from envs.minigrid import LAYOUTS
+from envs.minigrid import LAYOUTS, MINIGRID_ENVS
 
 GAMMA = 0.99
 LAYOUT_ORDER = ["open", "chicane", "symmetric", "islands", "swirl"]
@@ -73,6 +74,57 @@ def draw_cell(ax, layout, size):
                edgecolors="black", linewidth=0.8)
 
 
+def _reachable(layout, size):
+    """BFS from start to goal over free cells (cheap solvability check)."""
+    env = LAYOUTS[layout](size, random_start=False)
+    free = {(r, c) for r in range(size) for c in range(size) if (r, c) not in env.walls}
+    if (0, 0) not in free:
+        return False
+    seen = {(0, 0)}; q = deque(seen)
+    while q:
+        r, c = q.popleft()
+        if (r, c) == env.goal:
+            return True
+        for dr, dc in _DELTA.values():
+            nb = (r + dr, c + dc)
+            if nb in free and nb not in seen:
+                seen.add(nb); q.append(nb)
+    return env.goal in seen
+
+
+def draw_minigrid_cell(ax, layout, size):
+    """Render the real MiniGrid graphics for this (layout, size)."""
+    env = MINIGRID_ENVS[layout](inner_size=size, render_mode="rgb_array")
+    try:
+        env.unwrapped.highlight = False          # cleaner full-map render (no agent-view tint)
+    except Exception:
+        pass
+    env.reset()
+    ax.imshow(env.render())
+    ax.set_xticks([]); ax.set_yticks([])
+    if not _reachable(layout, size):
+        ax.text(0.5, 0.04, "unsolvable at this size", ha="center", va="bottom",
+                fontsize=8, color="red", fontweight="bold", transform=ax.transAxes)
+
+
+def _build_grid(sizes, draw_fn, title, out_name, cell=2.7):
+    rows, cols = len(LAYOUT_ORDER), len(sizes)
+    fig, axes = plt.subplots(rows, cols, figsize=(cell * cols, cell * rows), squeeze=False)
+    for i, layout in enumerate(LAYOUT_ORDER):
+        for j, size in enumerate(sizes):
+            print(f"  [{out_name}] {layout} {size}x{size} ...", flush=True)
+            draw_fn(axes[i][j], layout, size)
+            if i == 0:
+                axes[i][j].set_title(f"{size}x{size}", fontsize=13, fontweight="bold")
+            if j == 0:
+                axes[i][j].set_ylabel(layout, fontsize=13, fontweight="bold")
+    fig.suptitle(title, fontsize=14, fontweight="bold")
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    out = os.path.join(OUT, out_name)
+    plt.savefig(out, dpi=130, bbox_inches="tight"); plt.close(fig)
+    print(f"[OK] {out}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -80,24 +132,14 @@ def main():
     args = p.parse_args()
     os.makedirs(OUT, exist_ok=True)
 
-    rows, cols = len(LAYOUT_ORDER), len(args.sizes)
-    fig, axes = plt.subplots(rows, cols, figsize=(2.7 * cols, 2.7 * rows), squeeze=False)
-    for i, layout in enumerate(LAYOUT_ORDER):
-        for j, size in enumerate(args.sizes):
-            print(f"  {layout} {size}x{size} ...", flush=True)
-            draw_cell(axes[i][j], layout, size)
-            if i == 0:
-                axes[i][j].set_title(f"{size}x{size}", fontsize=13, fontweight="bold")
-            if j == 0:
-                axes[i][j].set_ylabel(layout, fontsize=13, fontweight="bold")
-
-    fig.suptitle("Map overview — layout (rows) x grid size (columns)\n"
-                 "walls=black, value surface=heatmap, start=cyan, goal=gold, white=optimal path",
-                 fontsize=14, fontweight="bold")
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    out = os.path.join(OUT, "map_overview.png")
-    plt.savefig(out, dpi=130, bbox_inches="tight"); plt.close(fig)
-    print(f"\n[OK] {out}")
+    _build_grid(args.sizes, draw_cell,
+                "Map overview (value surface) — layout (rows) x grid size (columns)\n"
+                "walls=black, value heatmap, start=cyan, goal=gold, white=optimal path",
+                "map_overview.png")
+    _build_grid(args.sizes, draw_minigrid_cell,
+                "Map overview (MiniGrid graphics) — layout (rows) x grid size (columns)\n"
+                "real minigrid render: agent=red triangle, walls=grey, goal=green",
+                "map_overview_minigrid.png")
 
 
 if __name__ == "__main__":
