@@ -13,7 +13,7 @@ class GridWorld:
     Wall collisions are absorbed (agent stays in place).
     """
 
-    def __init__(self, rows: int = 5, cols: int = 5):
+    def __init__(self, rows: int = 1000, cols: int = 1000):
         self.rows = rows
         self.cols = cols
         self.goal = (rows - 1, cols - 1)
