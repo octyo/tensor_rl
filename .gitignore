@@ -1,2 +1,5 @@
 *.pyc
 CLAUDE.md
+sim/designs/**/data/
+sim/designs/**/logs/
+sim/designs/**/figures/

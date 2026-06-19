@@ -1,0 +1,19 @@
+Design 1: CP Q-Function
+============================================================
+
+MiniGrid-Empty-5x5-v0  cp_r2  params=55  solve=56%  reward=0.487
+MiniGrid-Empty-5x5-v0  cp_r4  params=103  solve=98%  reward=0.864
+MiniGrid-Empty-5x5-v0  cp_r8  params=199  solve=79%  reward=0.697
+MiniGrid-Empty-5x5-v0  cp_r16  params=391  solve=98%  reward=0.894
+MiniGrid-Empty-5x5-v0  cp_r32  params=775  solve=99%  reward=0.907
+MiniGrid-DoorKey-5x5-v0  cp_r2  params=55  solve=0%  reward=0.006
+MiniGrid-DoorKey-5x5-v0  cp_r4  params=103  solve=1%  reward=0.007
+MiniGrid-DoorKey-5x5-v0  cp_r8  params=199  solve=15%  reward=0.139
+MiniGrid-DoorKey-5x5-v0  cp_r16  params=391  solve=0%  reward=0.005
+MiniGrid-DoorKey-5x5-v0  cp_r32  params=775  solve=2%  reward=0.031
+MiniGrid-DistShift1-v0  cp_r2  params=55  solve=1%  reward=0.008
+MiniGrid-DistShift1-v0  cp_r4  params=103  solve=0%  reward=0.006
+MiniGrid-DistShift1-v0  cp_r8  params=199  solve=3%  reward=0.027
+MiniGrid-DistShift1-v0  cp_r16  params=391  solve=0%  reward=0.001
+MiniGrid-DistShift1-v0  cp_r32  params=775  solve=0%  reward=0.001
+
