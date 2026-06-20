@@ -1,0 +1,49 @@
+Design 4: True MPS Tensor Network (FeatureMap)
+============================================================
+
+MiniGrid-Empty-5x5-v0  fmps_r1_d4  params=715  solve=24%  reward=0.221
+MiniGrid-Empty-5x5-v0  fmps_r1_d8  params=1423  solve=22%  reward=0.202
+MiniGrid-Empty-5x5-v0  fmps_r1_d16  params=2839  solve=26%  reward=0.235
+MiniGrid-Empty-5x5-v0  fmps_r2_d4  params=867  solve=27%  reward=0.244
+MiniGrid-Empty-5x5-v0  fmps_r2_d8  params=1727  solve=27%  reward=0.240
+MiniGrid-Empty-5x5-v0  fmps_r2_d16  params=3447  solve=24%  reward=0.242
+MiniGrid-Empty-5x5-v0  fmps_r4_d4  params=1411  solve=20%  reward=0.196
+MiniGrid-Empty-5x5-v0  fmps_r4_d8  params=2815  solve=24%  reward=0.223
+MiniGrid-Empty-5x5-v0  fmps_r4_d16  params=5623  solve=26%  reward=0.231
+MiniGrid-Empty-5x5-v0  fmps_r8_d4  params=3459  solve=22%  reward=0.209
+MiniGrid-Empty-5x5-v0  fmps_r8_d8  params=6911  solve=22%  reward=0.201
+MiniGrid-Empty-5x5-v0  fmps_r8_d16  params=13815  solve=29%  reward=0.248
+MiniGrid-Empty-5x5-v0  fmps_r16_d4  params=11395  solve=24%  reward=0.210
+MiniGrid-Empty-5x5-v0  fmps_r16_d8  params=22783  solve=28%  reward=0.255
+MiniGrid-Empty-5x5-v0  fmps_r16_d16  params=45559  solve=24%  reward=0.214
+MiniGrid-DoorKey-5x5-v0  fmps_r1_d4  params=715  solve=2%  reward=0.013
+MiniGrid-DoorKey-5x5-v0  fmps_r1_d8  params=1423  solve=1%  reward=0.012
+MiniGrid-DoorKey-5x5-v0  fmps_r1_d16  params=2839  solve=0%  reward=0.004
+MiniGrid-DoorKey-5x5-v0  fmps_r2_d4  params=867  solve=0%  reward=0.005
+MiniGrid-DoorKey-5x5-v0  fmps_r2_d8  params=1727  solve=2%  reward=0.014
+MiniGrid-DoorKey-5x5-v0  fmps_r2_d16  params=3447  solve=0%  reward=0.006
+MiniGrid-DoorKey-5x5-v0  fmps_r4_d4  params=1411  solve=1%  reward=0.008
+MiniGrid-DoorKey-5x5-v0  fmps_r4_d8  params=2815  solve=0%  reward=0.007
+MiniGrid-DoorKey-5x5-v0  fmps_r4_d16  params=5623  solve=0%  reward=0.011
+MiniGrid-DoorKey-5x5-v0  fmps_r8_d4  params=3459  solve=0%  reward=0.006
+MiniGrid-DoorKey-5x5-v0  fmps_r8_d8  params=6911  solve=0%  reward=0.008
+MiniGrid-DoorKey-5x5-v0  fmps_r8_d16  params=13815  solve=0%  reward=0.013
+MiniGrid-DoorKey-5x5-v0  fmps_r16_d4  params=11395  solve=0%  reward=0.006
+MiniGrid-DoorKey-5x5-v0  fmps_r16_d8  params=22783  solve=1%  reward=0.009
+MiniGrid-DoorKey-5x5-v0  fmps_r16_d16  params=45559  solve=0%  reward=0.006
+MiniGrid-DistShift1-v0  fmps_r1_d4  params=715  solve=0%  reward=0.005
+MiniGrid-DistShift1-v0  fmps_r1_d8  params=1423  solve=0%  reward=0.002
+MiniGrid-DistShift1-v0  fmps_r1_d16  params=2839  solve=1%  reward=0.010
+MiniGrid-DistShift1-v0  fmps_r2_d4  params=867  solve=0%  reward=0.006
+MiniGrid-DistShift1-v0  fmps_r2_d8  params=1727  solve=0%  reward=0.001
+MiniGrid-DistShift1-v0  fmps_r2_d16  params=3447  solve=1%  reward=0.008
+MiniGrid-DistShift1-v0  fmps_r4_d4  params=1411  solve=0%  reward=0.003
+MiniGrid-DistShift1-v0  fmps_r4_d8  params=2815  solve=0%  reward=0.003
+MiniGrid-DistShift1-v0  fmps_r4_d16  params=5623  solve=0%  reward=0.010
+MiniGrid-DistShift1-v0  fmps_r8_d4  params=3459  solve=0%  reward=0.009
+MiniGrid-DistShift1-v0  fmps_r8_d8  params=6911  solve=1%  reward=0.010
+MiniGrid-DistShift1-v0  fmps_r8_d16  params=13815  solve=0%  reward=0.006
+MiniGrid-DistShift1-v0  fmps_r16_d4  params=11395  solve=1%  reward=0.006
+MiniGrid-DistShift1-v0  fmps_r16_d8  params=22783  solve=0%  reward=0.001
+MiniGrid-DistShift1-v0  fmps_r16_d16  params=45559  solve=0%  reward=0.002
+
