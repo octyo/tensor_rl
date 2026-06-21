@@ -16,9 +16,9 @@ wall geometry.
 
   MiniGrid env (renderable)        derived dense study env (LAYOUTS)
   ------------------------         ---------------------------------
-  OpenEnv                          OpenGrid
-  ChicaneEnv                       ChicaneGrid
-  SymmetricEnv                     SymmetricGrid
+  EmptyEnv                          EmptyGrid
+  NarrowEnv                       NarrowGrid
+  ChicaneEnv                     ChicaneGrid
   IslandsEnv                       IslandsGrid
   SimpleEnv (door+key)             - (kept as a real MiniGrid env)
 """
@@ -34,12 +34,12 @@ from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.minigrid_env import MiniGridEnv
 
 from envs.gridworld import GridWorld, NUM_ACTIONS, _DELTA
-from envs.obstacle_gridworld import ObstacleGridWorld, chicane_walls
+from envs.obstacle_gridworld import ObstacleGridWorld, narrow_walls
 
-__all__ = ["OpenEnv", "ChicaneEnv", "SymmetricEnv", "IslandsEnv", "SwirlEnv",
-           "SimpleEnv", "OpenGrid", "ChicaneGrid", "SymmetricGrid", "IslandsGrid",
+__all__ = ["EmptyEnv", "NarrowEnv", "ChicaneEnv", "IslandsEnv", "SwirlEnv",
+           "SimpleEnv", "EmptyGrid", "NarrowGrid", "ChicaneGrid", "IslandsGrid",
            "SwirlGrid", "LAYOUTS", "MINIGRID_ENVS", "extract_layout",
-           "chicane_walls", "symmetric_walls", "island_walls", "swirl_walls"]
+           "narrow_walls", "chicane_walls", "island_walls", "swirl_walls"]
 
 
 # ── wall-geometry generators (interior (row,col) coords, 0-indexed) ──────────
@@ -65,7 +65,7 @@ _SYM_UPPER = [(0.00, 0.30), (0.12, 0.285), (0.26, 0.305), (0.40, 0.29), (0.54, 0
               (0.66, 0.315), (0.72, 0.37), (0.725, 0.45)]
 
 
-def symmetric_walls(size):
+def chicane_walls(size):
     pts = [(round(y * (size - 1)), round(x * (size - 1))) for (x, y) in _SYM_UPPER]
     walls = set()
     for i in range(len(pts) - 1):
@@ -160,6 +160,11 @@ def swirl_walls(size):
     """
     big = _arc(0.62, 0.62, 0.45, 170, 280, size)     # centre on diagonal
     blade = _arc(0.78, 0.20, 0.27, 42, 143, size)    # right-edge blade
+    # the blade's outer tip can land one cell short of the border (rounding), so
+    # extend the rightmost blade cell straight to the right edge; the diagonal
+    # transpose below then closes the matching bottom-edge gap too.
+    tr, tc = max(blade, key=lambda rc: rc[1])
+    blade |= {(tr, c) for c in range(tc, size)}
     w = big | blade
     w |= {(c, r) for (r, c) in w}                     # main-diagonal symmetry
     w.discard((0, 0)); w.discard((size - 1, size - 1))
@@ -221,20 +226,20 @@ class _LayoutEnv(MiniGridEnv):
         self.mission = _mission()
 
 
-class OpenEnv(_LayoutEnv):
+class EmptyEnv(_LayoutEnv):
     pass
+
+
+class NarrowEnv(_LayoutEnv):
+    @staticmethod
+    def wall_fn(inner):
+        return narrow_walls(inner, inner)
 
 
 class ChicaneEnv(_LayoutEnv):
     @staticmethod
     def wall_fn(inner):
-        return chicane_walls(inner, inner)
-
-
-class SymmetricEnv(_LayoutEnv):
-    @staticmethod
-    def wall_fn(inner):
-        return symmetric_walls(inner)
+        return chicane_walls(inner)
 
 
 class IslandsEnv(_LayoutEnv):
@@ -279,7 +284,7 @@ class SimpleEnv(MiniGridEnv):
         self.mission = "grand mission"
 
 
-MINIGRID_ENVS = {"open": OpenEnv, "chicane": ChicaneEnv, "symmetric": SymmetricEnv,
+MINIGRID_ENVS = {"empty": EmptyEnv, "narrow": NarrowEnv, "chicane": ChicaneEnv,
                  "islands": IslandsEnv, "swirl": SwirlEnv, "simple": SimpleEnv}
 
 
@@ -310,7 +315,7 @@ def extract_layout(mg_env):
 class _StudyGrid(ObstacleGridWorld):
     """Dense (row,col)x4 MDP whose walls are extracted from a MiniGrid layout."""
 
-    minigrid_cls = OpenEnv
+    minigrid_cls = EmptyEnv
 
     def __init__(self, size=20, random_start=False):
         self.minigrid = self.minigrid_cls(inner_size=size)
@@ -318,16 +323,16 @@ class _StudyGrid(ObstacleGridWorld):
         super().__init__(inner, inner, walls=walls, random_start=random_start)
 
 
-class OpenGrid(_StudyGrid):
-    minigrid_cls = OpenEnv
+class EmptyGrid(_StudyGrid):
+    minigrid_cls = EmptyEnv
+
+
+class NarrowGrid(_StudyGrid):
+    minigrid_cls = NarrowEnv
 
 
 class ChicaneGrid(_StudyGrid):
     minigrid_cls = ChicaneEnv
-
-
-class SymmetricGrid(_StudyGrid):
-    minigrid_cls = SymmetricEnv
 
 
 class IslandsGrid(_StudyGrid):
@@ -338,5 +343,5 @@ class SwirlGrid(_StudyGrid):
     minigrid_cls = SwirlEnv
 
 
-LAYOUTS = {"open": OpenGrid, "chicane": ChicaneGrid, "symmetric": SymmetricGrid,
+LAYOUTS = {"empty": EmptyGrid, "narrow": NarrowGrid, "chicane": ChicaneGrid,
            "islands": IslandsGrid, "swirl": SwirlGrid}

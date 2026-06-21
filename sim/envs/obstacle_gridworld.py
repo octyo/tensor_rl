@@ -5,7 +5,7 @@ Same contract as envs/gridworld.GridWorld (reward -1/step, goal at bottom-right,
 plotting/experiment code. The only additions are impassable `walls` cells and an
 optional random start.
 
-The default layout is a chicane that forces the path to *double back*: two sealing
+The default layout is a "narrow" detour that forces the path to *double back*: two sealing
 walls create (a) a left zone connected to a vertical corridor only at the very
 bottom, and (b) that corridor connected to the goal column only via a gap partway
 up. So the shortest route runs down the left edge to the bottom-left corner, along
@@ -20,7 +20,7 @@ A serpentine maze is also provided for comparison.
 from envs.gridworld import GridWorld, NUM_ACTIONS, _DELTA
 
 
-def chicane_walls(rows: int, cols: int) -> frozenset:
+def narrow_walls(rows: int, cols: int) -> frozenset:
     """Two sealing walls that force a down -> across -> back-up -> down detour.
 
     left_col is walled top-to-(bottom-1) so the left zone reaches the corridor
@@ -63,7 +63,7 @@ class ObstacleGridWorld(GridWorld):
     def __init__(self, rows: int = 12, cols: int = 12, walls=None,
                  random_start: bool = False):
         super().__init__(rows, cols)
-        self.walls = frozenset(walls) if walls is not None else chicane_walls(rows, cols)
+        self.walls = frozenset(walls) if walls is not None else narrow_walls(rows, cols)
         self.random_start = random_start
         self._free = [s for s in self._all_cells()
                       if s not in self.walls and s != self.goal]

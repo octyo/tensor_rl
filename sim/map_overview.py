@@ -4,8 +4,9 @@
 Each cell shows the maze for one (layout, size): walls in black, the value
 surface V*(s) as the heatmap (so the geodesic-to-goal structure is visible),
 start (cyan square), goal (gold star) and the optimal path (white line). Cells
-where the layout is unsolvable at that size (swirl needs >=11, symmetric >=8)
-are marked N/A.
+where the layout is unsolvable at that size (swirl needs >=11, chicane >=8)
+are marked N/A. (chicane = the old "symmetric" diagonal maze; narrow = the old
+"chicane" double-back detour.)
 
     python map_overview.py                       # default sizes 8 12 24 48
     python map_overview.py --sizes 12 20 32 48
@@ -27,7 +28,7 @@ from envs.gridworld import _DELTA
 from envs.minigrid import LAYOUTS, MINIGRID_ENVS
 
 GAMMA = 0.99
-LAYOUT_ORDER = ["open", "chicane", "symmetric", "islands", "swirl"]
+LAYOUT_ORDER = ["empty", "narrow", "chicane", "islands", "swirl"]
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "_summary")
 
 
@@ -118,8 +119,7 @@ def _build_grid(sizes, draw_fn, title, out_name, cell=2.7):
                 axes[i][j].set_title(f"{size}x{size}", fontsize=13, fontweight="bold")
             if j == 0:
                 axes[i][j].set_ylabel(layout, fontsize=13, fontweight="bold")
-    fig.suptitle(title, fontsize=14, fontweight="bold")
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout()
     out = os.path.join(OUT, out_name)
     plt.savefig(out, dpi=130, bbox_inches="tight"); plt.close(fig)
     print(f"[OK] {out}")
@@ -129,17 +129,19 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--sizes", type=int, nargs="+", default=[8, 12, 24, 48])
+    p.add_argument("--tag", default="", help="suffix for output filenames, e.g. _small")
+    p.add_argument("--cell", type=float, default=2.7, help="subplot size (inches)")
     args = p.parse_args()
     os.makedirs(OUT, exist_ok=True)
 
     _build_grid(args.sizes, draw_cell,
                 "Map overview (value surface) — layout (rows) x grid size (columns)\n"
                 "walls=black, value heatmap, start=cyan, goal=gold, white=optimal path",
-                "map_overview.png")
+                f"map_overview{args.tag}.png", cell=args.cell)
     _build_grid(args.sizes, draw_minigrid_cell,
                 "Map overview (MiniGrid graphics) — layout (rows) x grid size (columns)\n"
                 "real minigrid render: agent=red triangle, walls=grey, goal=green",
-                "map_overview_minigrid.png")
+                f"map_overview_minigrid{args.tag}.png", cell=args.cell)
 
 
 if __name__ == "__main__":

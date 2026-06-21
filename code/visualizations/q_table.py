@@ -44,64 +44,72 @@ def _make_q_values(seed=7):
     return np.round(np.clip(q, 0, 1) * 10 - 1, 1)            # spread into a readable range
 
 
+def build_q_table(q=None):
+    """Build the heat-mapped Q-table mobject: VGroup(table, braces).
+
+    `q` is an S x A array; if omitted a structured demo table is generated.
+    """
+    if q is None:
+        q = _make_q_values()
+    lo, hi = q.min(), q.max()
+
+    cw, ch = 1.7, 0.56
+    rows, cols = q.shape
+
+    # ── grid of heat-mapped cells with their values ──────────────────────
+    grid = VGroup()
+    cells = {}
+    for i in range(rows):
+        for j in range(cols):
+            t = (q[i, j] - lo) / (hi - lo)
+            cell = Rectangle(
+                width=cw, height=ch,
+                fill_color=_value_color(t), fill_opacity=_CELL_OPACITY,
+                stroke_color=GREY_B, stroke_width=1.2,
+            ).move_to([j * cw, -i * ch, 0])
+            txt = Text(f"{q[i, j]:.1f}", font_size=20, color=WHITE)
+            txt.move_to(cell)
+            cells[(i, j)] = cell
+            grid.add(cell, txt)
+
+    # ── greedy action per state: blue outline ────────────────────────────
+    greedy = VGroup()
+    for i in range(rows):
+        j = int(np.argmax(q[i]))
+        box = cells[(i, j)].copy().set_fill(opacity=0)
+        box.set_stroke(_POLICY_COLOR, width=3.5)
+        greedy.add(box)
+
+    # ── column headers (actions) ─────────────────────────────────────────
+    headers = VGroup()
+    for j, name in enumerate(ACTIONS):
+        h = Text(name, font_size=22)
+        h.move_to([j * cw, ch * 0.5 + 0.45, 0])
+        headers.add(h)
+
+    # ── row labels (states as s_i : (x, y) grid coordinates) ─────────────
+    row_labels = VGroup()
+    for i in range(rows):
+        x, y = i % _GRID_W, i // _GRID_W
+        lbl = MathTex(rf"s_{{{i + 1}}}\colon ({x},\,{y})", font_size=24)
+        lbl.next_to(cells[(i, 0)], LEFT, buff=0.35)
+        row_labels.add(lbl)
+
+    table = VGroup(grid, greedy, headers, row_labels)
+
+    # ── braces with S / A labels ─────────────────────────────────────────
+    rb = Brace(row_labels, LEFT, buff=0.3)
+    rb_lbl = rb.get_tex("S").scale(1.0)
+    cb = Brace(VGroup(*[cells[(0, j)] for j in range(cols)]), UP, buff=0.95)
+    cb_lbl = cb.get_tex("A").scale(1.0)
+    braces = VGroup(rb, rb_lbl, cb, cb_lbl)
+
+    return VGroup(table, braces)
+
+
 class QTable(Scene):
     def construct(self):
-        q = _make_q_values()
-        lo, hi = q.min(), q.max()
-
-        cw, ch = 1.7, 0.56
-        rows, cols = N_STATES, len(ACTIONS)
-
-        # ── grid of heat-mapped cells with their values ──────────────────────
-        grid = VGroup()
-        cells = {}
-        for i in range(rows):
-            for j in range(cols):
-                t = (q[i, j] - lo) / (hi - lo)
-                cell = Rectangle(
-                    width=cw, height=ch,
-                    fill_color=_value_color(t), fill_opacity=_CELL_OPACITY,
-                    stroke_color=GREY_B, stroke_width=1.2,
-                ).move_to([j * cw, -i * ch, 0])
-                txt = Text(f"{q[i, j]:.1f}", font_size=20, color=WHITE)
-                txt.move_to(cell)
-                cells[(i, j)] = cell
-                grid.add(cell, txt)
-
-        # ── greedy action per state: gold outline ────────────────────────────
-        greedy = VGroup()
-        for i in range(rows):
-            j = int(np.argmax(q[i]))
-            box = cells[(i, j)].copy().set_fill(opacity=0)
-            box.set_stroke(_POLICY_COLOR, width=3.5)
-            greedy.add(box)
-
-        # ── column headers (actions) ─────────────────────────────────────────
-        headers = VGroup()
-        for j, name in enumerate(ACTIONS):
-            h = Text(name, font_size=22)
-            h.move_to([j * cw, ch * 0.5 + 0.45, 0])
-            headers.add(h)
-
-        # ── row labels (states as s_i : (x, y) grid coordinates) ─────────────
-        row_labels = VGroup()
-        for i in range(rows):
-            x, y = i % _GRID_W, i // _GRID_W
-            lbl = MathTex(rf"s_{{{i + 1}}}\colon ({x},\,{y})", font_size=24)
-            lbl.next_to(cells[(i, 0)], LEFT, buff=0.35)
-            row_labels.add(lbl)
-
-        table = VGroup(grid, greedy, headers, row_labels)
-
-        # ── braces with S / A labels ─────────────────────────────────────────
-        rb = Brace(row_labels, LEFT, buff=0.3)
-        rb_lbl = rb.get_tex("S").scale(1.0)
-        cb = Brace(VGroup(*[cells[(0, j)] for j in range(cols)]), UP, buff=0.95)
-        cb_lbl = cb.get_tex("A").scale(1.0)
-        braces = VGroup(rb, rb_lbl, cb, cb_lbl)
-
-        # ── caption ──────────────────────────────────────────────────────────
-        full = VGroup(table, braces)
+        full = build_q_table()
         caption = VGroup(
             MathTex(r"Q(s, a)\;\in\;\mathbb{R}^{S \times A}", font_size=40),
             Text("greedy policy:  argmaxₐ Q(s, a)", font_size=22, color=_POLICY_COLOR),

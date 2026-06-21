@@ -17,7 +17,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.tabular_baseline import value_iteration_q
 from envs.gridworld import _DELTA
-from envs.obstacle_gridworld import ObstacleGridWorld, chicane_walls
+from envs.obstacle_gridworld import ObstacleGridWorld, narrow_walls
 from obstacle_lab import draw_policy_map, greedy_path, REPORT_DIR, GAMMA
 
 
@@ -39,7 +39,7 @@ def jforce_walls(G):
     """Proven chicane (forces down->across->UP->goal) dressed as a J: the left wall
     gets a hook curling off its bottom (the J), and the goal-side seal is the
     second, taller hook."""
-    walls = set(chicane_walls(G, G))
+    walls = set(narrow_walls(G, G))
     left_col = G - 4
     # hook curling left off the bottom of the left 'stem' -> makes it read as a J
     hook = [(G - 2, left_col), (G - 2, left_col - 3), (G - 5, left_col - 3)]

@@ -33,8 +33,8 @@ from rank_analysis import cp_capture_curve
 DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 OUT_DIR = os.path.join(DATA_ROOT, "_summary")
 GAMMA = 0.99
-LAYOUT_ORDER = ["open", "chicane", "symmetric", "islands", "swirl"]
-LAYOUT_COLORS = {"open": "#1f77b4", "chicane": "#2ca02c", "symmetric": "#9467bd",
+LAYOUT_ORDER = ["empty", "narrow", "chicane", "islands", "swirl"]
+LAYOUT_COLORS = {"empty": "#1f77b4", "narrow": "#2ca02c", "chicane": "#9467bd",
                  "islands": "#ff7f0e", "swirl": "#d62728"}
 NAME_RE = re.compile(r"minigrid_(\d+)x\d+_(\d+)_([a-z]+)_(random|fixed)$")
 
