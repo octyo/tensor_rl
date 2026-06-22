@@ -171,3 +171,78 @@ class EfficiencyAvg(_AvgBase):
     y_range = [0, 16, 4]
     y_title = "accuracy / 1k params"
     title_txt = "Parameter efficiency vs grid size (averaged over layouts)"
+
+
+# ── average training curve (accuracy vs % of training) ───────────────────────
+
+def avg_training(runs, spawn, t_grid):
+    """Mean accuracy-over-training per method for one spawn, averaged over ALL
+    layouts+sizes after normalising each curve's x to 0..1 of its episode budget."""
+    out = {}
+    for meth in METHODS:
+        curves = []
+        for (lay, s, sp), m in runs.items():
+            if sp != spawn:
+                continue
+            cfg = next((c for c in m.get("configs", []) if c["label"] == meth), None)
+            if not cfg or len(cfg["checkpoints"]) < 2:
+                continue
+            cp = np.array(cfg["checkpoints"], float)
+            acc = np.array(cfg["acc_mean"], float)
+            curves.append(np.interp(t_grid, cp / cp[-1], acc))
+        out[meth] = np.nanmean(np.vstack(curves), axis=0) if curves else None
+    return out
+
+
+def _curve_panel(xv, series, y_range, y_title, sub, x_len=5.2, y_len=4.4):
+    axes = Axes(x_range=[0, 100, 25], y_range=y_range, x_length=x_len, y_length=y_len,
+                tips=False,
+                axis_config={"color": FG, "stroke_width": 2, "include_numbers": False},
+                y_axis_config={"include_numbers": True, "font_size": 20,
+                               "decimal_number_config": {"num_decimal_places":
+                                   0 if y_range[1] > 5 else 1}})
+    axes.get_axes()[1].numbers.set_color(FG)
+    grid = VGroup()
+    ymin, ymax, ystep = y_range
+    for yv in np.arange(ymin, ymax + 1e-9, ystep):
+        grid.add(Line(axes.c2p(0, yv), axes.c2p(100, yv),
+                      stroke_width=1, color="#4a5a70", stroke_opacity=0.35))
+    for xv0 in (0, 25, 50, 75, 100):
+        grid.add(Line(axes.c2p(xv0, ymin), axes.c2p(xv0, ymax),
+                      stroke_width=1, color="#4a5a70", stroke_opacity=0.35))
+    lines = VGroup()
+    for name, ys in series.items():
+        if ys is None:
+            continue
+        col = MCOLOR[name]
+        pts = [axes.c2p(x, y) for x, y in zip(xv, ys)]
+        poly = VMobject(color=col, stroke_width=5)
+        poly.set_points_as_corners(pts)
+        glow = poly.copy().set_stroke(width=16, opacity=0.22)
+        glow2 = poly.copy().set_stroke(width=9, opacity=0.30)
+        lines.add(glow, glow2, poly)
+    xt = VGroup()
+    for xv0 in (0, 25, 50, 75, 100):
+        xt.add(Text(f"{xv0}%", font_size=18, color=FG).next_to(
+            axes.c2p(xv0, ymin), DOWN, buff=0.18))
+    yl = Text(y_title, font_size=20, color=FG).rotate(PI / 2).next_to(axes, LEFT, buff=0.15)
+    st = Text(sub, font_size=24, color=FG, weight=BOLD).next_to(axes, UP, buff=0.2)
+    return VGroup(axes, grid, lines, xt, yl, st)
+
+
+class TrainingAvg(Scene):
+    def construct(self):
+        runs = load_runs()
+        t = np.linspace(0, 1, 41)
+        panels = VGroup()
+        for spawn in SPAWNS:
+            series = avg_training(runs, spawn, t)
+            panels.add(_curve_panel(t * 100, series, [0, 1.05, 0.2],
+                                    "accuracy", f"{spawn} start"))
+        panels.arrange(RIGHT, buff=1.2)
+        title = Text("Average training curve  (accuracy vs % of training)",
+                     font_size=30, color=FG, weight=BOLD).to_edge(UP, buff=0.3)
+        leg = _legend()
+        panels.next_to(title, DOWN, buff=0.45)
+        leg.next_to(panels, DOWN, buff=0.35)
+        self.add(title, panels, leg)

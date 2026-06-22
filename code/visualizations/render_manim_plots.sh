@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"                       # -> code/visualizations
 M=media/images/report_line_plots
 S=../../sim/data/_summary
-declare -a MAP=( "ParamsReduction:params_reduction" "AccuracyAvg:accuracy_avg" "EfficiencyAvg:efficiency_avg" )
+declare -a MAP=( "ParamsReduction:params_reduction" "AccuracyAvg:accuracy_avg" "EfficiencyAvg:efficiency_avg" "TrainingAvg:training_avg" )
 for pair in "${MAP[@]}"; do
     scene="${pair%%:*}"; name="${pair##*:}"
     .venv/bin/manim -s -qh report_line_plots.py "$scene"
