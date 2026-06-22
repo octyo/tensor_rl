@@ -97,13 +97,10 @@ def build_figure(sizes, runs, out_name="perf_overview.png", cell=2.7, fs=1.0):
                                       fontweight="bold")
     handles = [plt.Rectangle((0, 0), 1, 1, color=SPAWN_COLOR["fixed"]),
                plt.Rectangle((0, 0), 1, 1, color=SPAWN_COLOR["random"], hatch="//")]
-    fig.legend(handles, ["fixed start", "random start"], loc="upper right",
-               fontsize=11, ncol=2)
-    fig.suptitle("Performance overview — final greedy-policy accuracy: "
-                 "Tabular vs CP (rank 3/6/12)\nlayout (rows) x grid size (columns), "
-                 "bars = fixed vs random start  (1.0 = optimal policy everywhere)",
-                 fontsize=14, fontweight="bold")
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.suptitle("Final accuracy", fontsize=16 * fs, fontweight="bold", y=0.995)
+    fig.legend(handles, ["fixed start", "random start"], loc="upper center",
+               bbox_to_anchor=(0.5, 0.965), fontsize=13 * fs, ncol=2, frameon=False)
+    plt.tight_layout(rect=[0, 0, 1, 0.94])
     out = os.path.join(OUT, out_name)
     plt.savefig(out, dpi=130, bbox_inches="tight"); plt.close(fig)
     print(f"[OK] {out}")

@@ -1,11 +1,11 @@
 """
 Manim figure: CP (CANDECOMP/PARAFAC) decomposition of a 3-way tensor.
 
-    A  =  a_1 ∘ b_1 ∘ c_1  +  a_2 ∘ b_2 ∘ c_2  +  ...  +  a_r ∘ b_r ∘ c_r
+    A  =  a_1 ∘ x_1 ∘ y_1  +  a_2 ∘ x_2 ∘ y_2  +  ...  +  a_r ∘ x_r ∘ y_r
 
 A 3-way tensor written as a sum of r rank-one tensors.  Each rank-one term is
 the outer product of three factor vectors, drawn as three thin 3D bars (slabs)
-meeting at a corner: a_i (mode 1), b_i (mode 2), c_i (mode 3).
+meeting at a corner: a_i (mode 1), x_i (mode 2), y_i (mode 3).
 
 Everything is hand-projected with a fixed isometric camera (no ThreeDScene), so
 the cube and every bar share one consistent 3D perspective and the equation
@@ -108,7 +108,7 @@ def factor_bar(origin, axis, length, color, w=0.18):
 
 
 def rank_one_triad(idx, la=1.7, lb=1.5, lc=1.3, gap=0.42):
-    """One rank-one term: bars a_i (up), b_i (width), c_i (depth) from a corner.
+    """One rank-one term: bars a_i (up), x_i (width), y_i (depth) from a corner.
 
     `gap` pushes each bar a little off the shared corner so the ends don't
     overlap in a muddle.
@@ -126,8 +126,8 @@ def rank_one_triad(idx, la=1.7, lb=1.5, lc=1.3, gap=0.42):
     c = factor_bar(o + yc * gap, yc, lc, C_C)     # mode 3 -> depth
 
     a_lab = MathTex(f"a_{{{sub}}}", color=C_A).scale(0.85).next_to(P(o + za * (gap_a + la)), UP, buff=0.14)
-    b_lab = MathTex(f"b_{{{sub}}}", color=C_B).scale(0.85).next_to(P(o + xb * (gap + lb)), DR, buff=0.10)
-    c_lab = MathTex(f"c_{{{sub}}}", color=C_C).scale(0.85).next_to(P(o + yc * (gap + lc)), UR, buff=0.06)
+    b_lab = MathTex(f"x_{{{sub}}}", color=C_B).scale(0.85).next_to(P(o + xb * (gap + lb)), DR, buff=0.10)
+    c_lab = MathTex(f"y_{{{sub}}}", color=C_C).scale(0.85).next_to(P(o + yc * (gap + lc)), UR, buff=0.06)
 
     # Draw depth bar first, then width, then the upright bar on top.
     return VGroup(c, b, a, a_lab, b_lab, c_lab)
@@ -142,7 +142,7 @@ class CPDecomposition(Scene):
         cube = tensor_cube()
         cube_caption = VGroup(
             Tex("3-way tensor").scale(0.8),
-            MathTex(r"\mathcal{A}").scale(1.1),
+            MathTex(r"\chi").scale(1.1),
         ).arrange(DOWN, buff=0.12).next_to(cube, DOWN, buff=0.45)
         lhs = VGroup(cube, cube_caption)
 

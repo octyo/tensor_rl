@@ -46,16 +46,16 @@ def build_figure(sizes, ranks, out_name="params_reduction.png", log=True):
 
     # ── absolute parameter counts ────────────────────────────────────────────
     tab = [tab_params(s) for s in sizes]
-    axL.plot(x, tab, "o-", color="#d62728", lw=2.5, ms=8, label=f"Tabular  (S²·{A})")
+    axL.plot(x, tab, "o-", color="#d62728", lw=2.5, ms=8, label="Tabular")
     for r in ranks:
         cp = [cp_params(s, r) for s in sizes]
         axL.plot(x, cp, "s--", color=RANK_COLORS.get(r), lw=2, ms=6,
-                 label=f"CP rank {r}  ({r}·(2S+{A}))")
+                 label=f"CP rank {r}")
     if log:
         axL.set_yscale("log")
     axL.set_xticks(x); axL.set_xticklabels([f"{s}x{s}" for s in sizes])
     axL.set_xlabel("grid size", fontsize=12)
-    axL.set_ylabel("# parameters", fontsize=12)
+    axL.set_ylabel("number of parameters", fontsize=12)
     axL.set_title("Parameter count by different map sizes", fontsize=13,
                   fontweight="bold")
     axL.grid(True, which="both", alpha=0.25)
