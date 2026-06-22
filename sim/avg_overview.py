@@ -100,6 +100,61 @@ def make_fig(runs, metric, ylabel, title, out_name, ylim=None):
     print(f"[OK] {out}")
 
 
+CP_METHODS = ["CP rank=3", "CP rank=6", "CP rank=12"]
+
+
+def collect_mult(runs, spawn):
+    """Per CP method, per size: mean/std over layouts of the efficiency multiplier
+    eff(CP)/eff(Tabular), where eff = final_acc / n_params."""
+    sizes = sorted({s for (_l, s, sp) in runs if sp == spawn})
+    layouts = sorted({l for (l, _s, sp) in runs if sp == spawn})
+    res = {}
+    for meth in CP_METHODS:
+        means, stds = [], []
+        for s in sizes:
+            ratios = []
+            for lay in layouts:
+                m = runs.get((lay, s, spawn))
+                fa = (m or {}).get("final_acc", {})
+                if "Tabular" not in fa or meth not in fa:
+                    continue
+                eff_tab = fa["Tabular"] / n_params("Tabular", s)
+                eff_cp = fa[meth] / n_params(meth, s)
+                if eff_tab > 0:
+                    ratios.append(eff_cp / eff_tab)
+            means.append(np.mean(ratios) if ratios else np.nan)
+            stds.append(np.std(ratios) if ratios else np.nan)
+        res[meth] = (np.array(means), np.array(stds))
+    return sizes, res
+
+
+def make_eff_mult_fig(runs, out_name="efficiency_mult_avg.png"):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+    for ax, spawn in zip(axes, SPAWNS):
+        sizes, res = collect_mult(runs, spawn)
+        x = np.arange(len(sizes))
+        ax.axhline(1.0, color="#000000", ls="--", lw=1.5, label="Tabular (1x)")
+        for meth in CP_METHODS:
+            m, sd = res[meth]
+            ax.plot(x, m, "-o", color=COLORS[meth], lw=2.2, label=meth)
+            ax.fill_between(x, m - sd, m + sd, color=COLORS[meth], alpha=0.12, linewidth=0)
+            if np.isfinite(m[-1]):
+                ax.annotate(f"{m[-1]:.0f}x", (x[-1], m[-1]), textcoords="offset points",
+                            xytext=(5, 0), fontsize=8, color=COLORS[meth], va="center")
+        ax.set_xticks(x); ax.set_xticklabels([f"{s}x{s}" for s in sizes])
+        ax.set_xlabel("grid size", fontsize=11); ax.grid(True, alpha=0.3)
+        ax.set_title(f"{spawn} start", fontsize=12, fontweight="bold")
+    axes[0].set_ylabel("efficiency multiplier  (x tabular accuracy/param)", fontsize=11)
+    axes[1].legend(fontsize=9)
+    fig.suptitle("Parameter-efficiency multiplier vs grid size  "
+                 "(CP accuracy-per-param / tabular)", fontsize=14, fontweight="bold")
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    os.makedirs(OUT, exist_ok=True)
+    out = os.path.join(OUT, out_name)
+    plt.savefig(out, dpi=130, bbox_inches="tight"); plt.close(fig)
+    print(f"[OK] {out}")
+
+
 def avg_training(runs, spawn, t_grid):
     """Mean accuracy-over-training per method for one spawn, averaged over all
     layouts+sizes after normalising each curve's x to 0..1 of its episode budget."""
@@ -164,6 +219,7 @@ def main():
              "accuracy per 1,000 params  (mean over layouts)",
              f"Parameter efficiency vs grid size  (averaged over {n_lay} layouts, +/-1 std)",
              "efficiency_avg.png")
+    make_eff_mult_fig(runs)
     make_training_fig(runs)
 
 
