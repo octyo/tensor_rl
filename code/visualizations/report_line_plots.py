@@ -83,6 +83,16 @@ def _panel(series, y_range, y_title, sub, x_len=5.2, y_len=4.4):
                                "decimal_number_config": {"num_decimal_places":
                                    0 if y_range[1] > 5 else 1}})
     axes.get_axes()[1].numbers.set_color(FG)
+    # subtle background grid (classic Manim look)
+    n_ = len(SIZES)
+    ymin, ymax, ystep = y_range
+    grid = VGroup()
+    for yv in np.arange(ymin, ymax + 1e-9, ystep):
+        grid.add(Line(axes.c2p(0, yv), axes.c2p(n_ - 1, yv),
+                      stroke_width=1, color="#4a5a70", stroke_opacity=0.35))
+    for i in range(n_):
+        grid.add(Line(axes.c2p(i, ymin), axes.c2p(i, ymax),
+                      stroke_width=1, color="#4a5a70", stroke_opacity=0.35))
     lines = VGroup()
     for name, ys in series.items():
         pts = [axes.c2p(i, y) for i, y in enumerate(ys)]
@@ -100,7 +110,7 @@ def _panel(series, y_range, y_title, sub, x_len=5.2, y_len=4.4):
         xt.add(t)
     yl = Text(y_title, font_size=20, color=FG).rotate(PI / 2).next_to(axes, LEFT, buff=0.15)
     st = Text(sub, font_size=24, color=FG, weight=BOLD).next_to(axes, UP, buff=0.2)
-    return VGroup(axes, lines, xt, yl, st)
+    return VGroup(axes, grid, lines, xt, yl, st)
 
 
 def _legend():
