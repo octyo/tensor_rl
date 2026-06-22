@@ -146,28 +146,13 @@ def draw_policy_map(ax, get_q_row, env, opt_mask, title, vmin, vmax, show_path=F
 
 # ── training with learning curve ─────────────────────────────────────────────
 
-def _dense_q(agent):
-    return agent.Q if hasattr(agent, "Q") else agent.to_dense()
-
-
-def value_error(agent, env, q_star):
-    """Mads' yardstick: ||Q_hat - Q*||_F / ||Q*||_F over non-wall, non-goal cells."""
-    dense = _dense_q(agent)
-    mask = np.ones((env.rows, env.cols), dtype=bool)
-    for (r, c) in env.walls:
-        mask[r, c] = False
-    mask[env.goal] = False
-    d, q = dense[mask], q_star[mask]
-    return float(np.linalg.norm(d - q) / (np.linalg.norm(q) + 1e-12))
-
-
 def train_curve(kind, rank, grid, random_start, q_star, opt_mask,
                 n_episodes, eval_every, max_steps, seed):
     random.seed(seed); np.random.seed(seed)
     env = make_env(grid, random_start)
     eval_env = make_env(grid, random_start)
     agent, get_q_row = make_agent(kind, grid, grid, rank, TAB_LR, CP_LR, EPSILON_DECAY)
-    cp, acc, ret, verr = [], [], [], []
+    cp, acc, ret = [], [], []
     for ep in range(n_episodes):
         state = env.reset()
         for _ in range(max_steps):
@@ -180,8 +165,7 @@ def train_curve(kind, rank, grid, random_start, q_star, opt_mask,
             cp.append(ep + 1)
             acc.append(policy_accuracy(get_q_row, eval_env, opt_mask))
             ret.append(greedy_return(agent, eval_env))
-            verr.append(value_error(agent, eval_env, q_star))
-    return {"checkpoints": cp, "acc": acc, "ret": ret, "verr": verr,
+    return {"checkpoints": cp, "acc": acc, "ret": ret,
             "params": agent.param_count}, agent, get_q_row
 
 
@@ -195,51 +179,36 @@ def run_config(kind, rank, grid, random_start, q_star, opt_mask,
         per_seed.append(d)
         if seed == 0:
             keep_agent, keep_row = agent, get_q_row
-        print(f"    {label:<12} seed {seed+1}/{n_seeds}  "
-              f"final acc={d['acc'][-1]:.3f}  valueErr={d['verr'][-1]:.3f}")
+        print(f"    {label:<12} seed {seed+1}/{n_seeds}  final acc={d['acc'][-1]:.3f}")
     stack = lambda k: np.array([s[k] for s in per_seed])
     agg = {"label": label, "kind": kind, "rank": rank,
            "params": per_seed[0]["params"], "checkpoints": per_seed[0]["checkpoints"],
            "acc_mean": stack("acc").mean(0), "acc_std": stack("acc").std(0),
-           "ret_mean": stack("ret").mean(0), "ret_std": stack("ret").std(0),
-           "verr_mean": stack("verr").mean(0), "verr_std": stack("verr").std(0)}
+           "ret_mean": stack("ret").mean(0), "ret_std": stack("ret").std(0)}
     return agg, keep_row
 
 
-_RANK_COLORS = {1: "#17becf", 2: "#8c564b", 3: "#1f77b4", 6: "#2ca02c",
-                12: "#9467bd", 20: "#ff7f0e", 30: "#e377c2"}
-
-
-def _curve_style(cfg):
-    """Tabular = black dotted; CP (nlms) = solid; CP-target = dashed; colour by rank."""
-    if cfg["kind"] == "tabular":
-        return {"color": "black", "linestyle": ":", "linewidth": 2.4}
-    ls = "--" if cfg["kind"] == "cp_target" else "-"
-    return {"color": _RANK_COLORS.get(cfg["rank"], "#555"), "linestyle": ls, "linewidth": 2.0}
-
-
 def plot_curves(configs, opt_return, out_path, title):
-    fig, axes = plt.subplots(1, 3, figsize=(21, 6))
-    panels = [("acc_mean", "acc_std"), ("ret_mean", "ret_std"), ("verr_mean", "verr_std")]
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    ci = 0
     for cfg in configs:
-        st = _curve_style(cfg)
+        col = TAB_COLOR if cfg["kind"] == "tabular" else CP_COLORS[ci % len(CP_COLORS)]
+        if cfg["kind"] == "cp":
+            ci += 1
         x = cfg["checkpoints"]
-        for ax, (mkey, skey) in zip(axes, panels):
+        for ax, mkey, skey in [(axes[0], "acc_mean", "acc_std"), (axes[1], "ret_mean", "ret_std")]:
             m, s = np.array(cfg[mkey]), np.array(cfg[skey])
-            ax.plot(x, m, label=cfg["label"], **st)
-            ax.fill_between(x, m - s, m + s, color=st["color"], alpha=0.12)
+            ax.plot(x, m, label=cfg["label"], color=col, linewidth=2.2)
+            ax.fill_between(x, m - s, m + s, color=col, alpha=0.15)
     axes[0].set_ylim(0, 1.02)
     axes[0].set_ylabel("Policy accuracy (frac. optimal actions)")
     axes[0].set_title("Accuracy over training", fontweight="bold")
     axes[1].axhline(opt_return, color="gray", linestyle="--", linewidth=1.2,
-                    label="optimal")
+                    label="optimal greedy return")
     axes[1].set_ylabel("Greedy-policy return")
     axes[1].set_title("Greedy return over training", fontweight="bold")
-    axes[2].set_ylabel("value error  ||Q-Q*|| / ||Q*||")
-    axes[2].set_title("Value error vs Q* (lower=better)", fontweight="bold")
-    axes[2].set_ylim(bottom=0)
     for ax in axes:
-        ax.set_xlabel("Training episode"); ax.grid(True, alpha=0.3); ax.legend(fontsize=8)
+        ax.set_xlabel("Training episode"); ax.grid(True, alpha=0.3); ax.legend(fontsize=9)
     fig.suptitle(title, fontsize=14, fontweight="bold")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(out_path, dpi=110, bbox_inches="tight"); plt.close(fig)
@@ -294,27 +263,23 @@ def _render_video(panels, q_star, opt_mask, grid, vmin, vmax,
 
 
 def make_videos(out, grid, random_start, q_star, opt_mask, vmin, vmax,
-                ranks, video_rank, n_episodes, snap_every, max_steps, fps, title,
-                variants=("nlms",)):
-    """Two videos from a single training pass per agent, comparing CP variants:
-       video.mp4        OPTIMAL | TABULAR | <each variant at video_rank>
-       video_multi.mp4  OPTIMAL | TABULAR | <each variant at every rank>
+                ranks, video_rank, n_episodes, snap_every, max_steps, fps, title):
+    """Two videos from a single training pass per agent:
+       video.mp4        OPTIMAL | TABULAR | CP rank=video_rank   (easy to read)
+       video_multi.mp4  OPTIMAL | TABULAR | CP for every rank    (more heatmaps)
     """
-    variant_kind = {"nlms": "cp", "target": "cp_target"}
-    variant_tag = {"nlms": "CP", "target": "CP-tgt"}
     snaps = {("tabular", 0): _video_snapshots(grid, "tabular", 0, random_start,
                                               n_episodes, snap_every, max_steps)}
-    for v in variants:
-        for rk in sorted(set(ranks) | {video_rank}):
-            snaps[(v, rk)] = _video_snapshots(grid, variant_kind[v], rk, random_start,
-                                              n_episodes, snap_every, max_steps)
-    easy = [("TABULAR", snaps[("tabular", 0)])]
-    easy += [(f"{variant_tag[v]} r{video_rank}", snaps[(v, video_rank)]) for v in variants]
-    _render_video(easy, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes, fps,
+    for rk in sorted(set(ranks) | {video_rank}):
+        snaps[("cp", rk)] = _video_snapshots(grid, "cp", rk, random_start,
+                                             n_episodes, snap_every, max_steps)
+    _render_video([("TABULAR", snaps[("tabular", 0)]),
+                   (f"CP rank={video_rank}", snaps[("cp", video_rank)])],
+                  q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes, fps,
                   os.path.join(out, "video.mp4"), title)
-    multi = [("TABULAR", snaps[("tabular", 0)])]
-    multi += [(f"{variant_tag[v]} r{rk}", snaps[(v, rk)]) for v in variants for rk in ranks]
-    _render_video(multi, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes,
+    panels = [("TABULAR", snaps[("tabular", 0)])] + \
+             [(f"CP rank={rk}", snaps[("cp", rk)]) for rk in ranks]
+    _render_video(panels, q_star, opt_mask, grid, vmin, vmax, snap_every, n_episodes,
                   fps, os.path.join(out, "video_multi.mp4"), title)
 
 
@@ -358,9 +323,6 @@ def main():
                    help="regenerate only the videos in existing folders")
     p.add_argument("--spawn", choices=["random", "fixed", "both"], default="both",
                    help="which start regime(s) to run (one per HPC task)")
-    p.add_argument("--cp-variants", nargs="+", choices=["nlms", "target"],
-                   default=["nlms", "target"],
-                   help="CP agents to compare: nlms (original) and/or target (deadly-triad fix)")
     p.add_argument("--no-videos", action="store_true",
                    help="skip video rendering (e.g. if ffmpeg is unavailable)")
     args = p.parse_args()
@@ -400,8 +362,7 @@ def main():
             print(f"\n=== {layout} / {spawn} videos -> {out} ===", flush=True)
             make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
                         args.ranks, args.video_rank, E, args.snap_every,
-                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}",
-                        variants=args.cp_variants)
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
         return
 
     # spawn-independent: rank-capture curve (compute once, drop into both folders)
@@ -430,16 +391,12 @@ def main():
         agg, row = run_config("tabular", 0, grid, rstart, q_star, opt_mask,
                               E, args.eval_every, args.max_steps, args.seeds, "Tabular")
         configs.append(agg); map_rows.append(("TABULAR", row))
-        # CP variants: "nlms" = original CP agent, "target" = deadly-triad fix
-        variant_kind = {"nlms": "cp", "target": "cp_target"}
-        variant_tag = {"nlms": "CP", "target": "CP-tgt"}
-        for variant in args.cp_variants:
-            for rk in args.ranks:
-                print(f"  {variant_tag[variant]} rank={rk}:")
-                agg, row = run_config(variant_kind[variant], rk, grid, rstart, q_star,
-                                      opt_mask, E, args.eval_every, args.max_steps,
-                                      args.seeds, f"{variant_tag[variant]} r{rk}")
-                configs.append(agg); map_rows.append((f"{variant_tag[variant]} r{rk}", row))
+        for rk in args.ranks:
+            print(f"  CP rank={rk}:")
+            agg, row = run_config("cp", rk, grid, rstart, q_star, opt_mask,
+                                  E, args.eval_every, args.max_steps, args.seeds,
+                                  f"CP rank={rk}")
+            configs.append(agg); map_rows.append((f"CP rank={rk}", row))
 
         # cp-speedup-style learning curves (accuracy + greedy return over training)
         plot_curves(configs, opt_ret, os.path.join(out, "curves.png"),
@@ -479,8 +436,7 @@ def main():
             print(f"  rendering videos ...", flush=True)
             make_videos(out, grid, rstart, q_star, opt_mask, vmin, vmax,
                         args.ranks, args.video_rank, E, args.snap_every,
-                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}",
-                        variants=args.cp_variants)
+                        args.max_steps, args.fps, f"{layout} {grid}x{grid}, {spawn}")
         print(f"  [OK] all artifacts in {out}")
 
 

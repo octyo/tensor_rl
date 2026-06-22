@@ -136,16 +136,22 @@ def greedy_return(agent, env: GridWorld, n_rollouts: int = 30,
 
 def make_agent(kind: str, rows: int, cols: int, rank: int,
                tab_lr: float, cp_lr: float, epsilon_decay: float):
-    """kind == 'tabular' or 'cp'. Returns (agent, get_q_row_fn)."""
+    """kind == 'tabular' or 'cp'. Returns (agent, get_q_row_fn).
+
+    NOTE (mads-feedback branch): the 'cp' method is the target-network CP agent
+    (deadly-triad fix / general RL practice), so the whole battery trains CP with
+    the more stable update while keeping the same 'CP rank=N' labels and output
+    format. Use 'cp_nlms' for the original plain-NLMS CP agent.
+    """
     if kind == "tabular":
         agent = TabularGridQAgent(rows, cols, lr=tab_lr, gamma=GAMMA,
                                   epsilon_decay=epsilon_decay)
         return agent, (lambda r, c: agent.Q[r, c])
-    elif kind == "cp":
+    elif kind == "cp_nlms":
         agent = CPGridQAgent(rows, cols, rank=rank, lr=cp_lr, gamma=GAMMA,
                              epsilon_decay=epsilon_decay)
         return agent, (lambda r, c: agent._q_all_actions((r, c)))
-    elif kind == "cp_target":
+    elif kind in ("cp", "cp_target"):
         agent = CPTargetGridQAgent(rows, cols, rank=rank, lr=cp_lr, gamma=GAMMA,
                                    epsilon_decay=epsilon_decay)
         return agent, (lambda r, c: agent._q_all_actions((r, c)))
