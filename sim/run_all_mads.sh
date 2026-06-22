@@ -19,10 +19,11 @@ fi
 mkdir -p data
 
 # 2. build the job list (big sizes first for better load balancing)
-declare -A EMAP=( [8]=2000 [12]=4000 [16]=6000 [24]=14000 [32]=26000 [48]=58000 )
+ep_for() { case "$1" in 8) echo 2000;; 12) echo 4000;; 16) echo 6000;;
+                        24) echo 14000;; 32) echo 26000;; 48) echo 58000;; esac; }
 JOBS="$LOG/jobs.txt"; : > "$JOBS"
 for S in 48 32 24 16 12 8; do
-    E=${EMAP[$S]}
+    E=$(ep_for "$S")
     MS=$(( 12 * S ))
     EV=$(( E / 50 ));  (( EV < 100 )) && EV=100
     SN=$(( E / 200 )); (( SN < 50 )) && SN=50
