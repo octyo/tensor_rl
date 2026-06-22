@@ -20,7 +20,7 @@ import re
 import numpy as np
 from manim import *
 
-config.background_color = WHITE
+config.background_color = "#0e1117"   # classic dark Manim canvas
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.normpath(os.path.join(HERE, "..", "..", "sim", "data"))
@@ -28,11 +28,11 @@ A = 4
 SIZES = [8, 12, 16, 24, 32, 48]
 XLAB = [f"{s}x{s}" for s in SIZES]
 METHODS = ["Tabular", "CP rank=3", "CP rank=6", "CP rank=12"]
-MCOLOR = {"Tabular": BLACK, "CP rank=3": BLUE_D,
-          "CP rank=6": GREEN_D, "CP rank=12": PURPLE}
+MCOLOR = {"Tabular": GREY_A, "CP rank=3": BLUE,
+          "CP rank=6": GREEN, "CP rank=12": YELLOW}
 SPAWNS = ["fixed", "random"]
 PAT = re.compile(r"minigrid_(\d+)x\d+_(\d+)_([a-z]+)_(fixed|random)$")
-DARK = BLACK
+FG = "#E8EAED"   # light foreground for axes / text on the dark canvas
 
 
 def n_params(method, size):
@@ -77,27 +77,29 @@ def _panel(series, y_range, y_title, sub, x_len=5.2, y_len=4.4):
     n = len(SIZES)
     axes = Axes(x_range=[0, n - 1, 1], y_range=y_range, x_length=x_len, y_length=y_len,
                 tips=False,
-                axis_config={"color": DARK, "stroke_width": 2,
+                axis_config={"color": FG, "stroke_width": 2,
                              "include_numbers": False},
                 y_axis_config={"include_numbers": True, "font_size": 20,
                                "decimal_number_config": {"num_decimal_places":
                                    0 if y_range[1] > 5 else 1}})
-    axes.get_axes()[1].numbers.set_color(DARK)
+    axes.get_axes()[1].numbers.set_color(FG)
     lines = VGroup()
     for name, ys in series.items():
         pts = [axes.c2p(i, y) for i, y in enumerate(ys)]
         col = MCOLOR[name]
-        poly = VMobject(color=col, stroke_width=3.5)
+        poly = VMobject(color=col, stroke_width=5)
         poly.set_points_as_corners(pts)
-        dots = VGroup(*[Dot(p, radius=0.055, color=col) for p in pts])
-        lines.add(poly, dots)
+        glow = poly.copy().set_stroke(width=16, opacity=0.22)   # neon glow
+        glow2 = poly.copy().set_stroke(width=9, opacity=0.30)
+        dots = VGroup(*[Dot(p, radius=0.07, color=col) for p in pts])
+        lines.add(glow, glow2, poly, dots)
     # x tick labels
     xt = VGroup()
     for i, lab in enumerate(XLAB):
-        t = Text(lab, font_size=18, color=DARK).next_to(axes.c2p(i, y_range[0]), DOWN, buff=0.18)
+        t = Text(lab, font_size=18, color=FG).next_to(axes.c2p(i, y_range[0]), DOWN, buff=0.18)
         xt.add(t)
-    yl = Text(y_title, font_size=20, color=DARK).rotate(PI / 2).next_to(axes, LEFT, buff=0.15)
-    st = Text(sub, font_size=24, color=DARK, weight=BOLD).next_to(axes, UP, buff=0.2)
+    yl = Text(y_title, font_size=20, color=FG).rotate(PI / 2).next_to(axes, LEFT, buff=0.15)
+    st = Text(sub, font_size=24, color=FG, weight=BOLD).next_to(axes, UP, buff=0.2)
     return VGroup(axes, lines, xt, yl, st)
 
 
@@ -105,7 +107,7 @@ def _legend():
     items = VGroup()
     for name in METHODS:
         bar = Line(ORIGIN, RIGHT * 0.5, color=MCOLOR[name], stroke_width=5)
-        lab = Text(name, font_size=20, color=DARK).next_to(bar, RIGHT, buff=0.12)
+        lab = Text(name, font_size=20, color=FG).next_to(bar, RIGHT, buff=0.12)
         items.add(VGroup(bar, lab))
     items.arrange(RIGHT, buff=0.5)
     return items
@@ -119,7 +121,7 @@ class ParamsReduction(Scene):
         panel = _panel(series, [0, 9500, 2000], "number of parameters",
                        "", x_len=8.5, y_len=5.0)
         title = Text("Parameter count by different map sizes", font_size=30,
-                     color=DARK, weight=BOLD)
+                     color=FG, weight=BOLD)
         leg = _legend()
         title.to_edge(UP, buff=0.3)
         panel.next_to(title, DOWN, buff=0.35)
@@ -140,7 +142,7 @@ class _AvgBase(Scene):
             series = avg_over_layouts(runs, spawn, self.metric)
             panels.add(_panel(series, self.y_range, self.y_title, f"{spawn} start"))
         panels.arrange(RIGHT, buff=1.2)
-        title = Text(self.title_txt, font_size=30, color=DARK, weight=BOLD).to_edge(UP, buff=0.3)
+        title = Text(self.title_txt, font_size=30, color=FG, weight=BOLD).to_edge(UP, buff=0.3)
         leg = _legend()
         panels.next_to(title, DOWN, buff=0.45)
         leg.next_to(panels, DOWN, buff=0.35)
