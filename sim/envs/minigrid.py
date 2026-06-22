@@ -16,9 +16,9 @@ wall geometry.
 
   MiniGrid env (renderable)        derived dense study env (LAYOUTS)
   ------------------------         ---------------------------------
-  OpenEnv                          OpenGrid
-  ChicaneEnv                       ChicaneGrid
-  SymmetricEnv                     SymmetricGrid
+  EmptyEnv                          EmptyGrid
+  NarrowEnv                       NarrowGrid
+  ChicaneEnv                     ChicaneGrid
   IslandsEnv                       IslandsGrid
   SimpleEnv (door+key)             - (kept as a real MiniGrid env)
 """
@@ -34,12 +34,12 @@ from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.minigrid_env import MiniGridEnv
 
 from envs.gridworld import GridWorld, NUM_ACTIONS, _DELTA
-from envs.obstacle_gridworld import ObstacleGridWorld, chicane_walls
+from envs.obstacle_gridworld import ObstacleGridWorld, narrow_walls
 
-__all__ = ["OpenEnv", "ChicaneEnv", "SymmetricEnv", "IslandsEnv", "SwirlEnv",
-           "SimpleEnv", "OpenGrid", "ChicaneGrid", "SymmetricGrid", "IslandsGrid",
+__all__ = ["EmptyEnv", "NarrowEnv", "ChicaneEnv", "IslandsEnv", "SwirlEnv",
+           "SimpleEnv", "EmptyGrid", "NarrowGrid", "ChicaneGrid", "IslandsGrid",
            "SwirlGrid", "LAYOUTS", "MINIGRID_ENVS", "extract_layout",
-           "chicane_walls", "symmetric_walls", "island_walls", "swirl_walls"]
+           "narrow_walls", "chicane_walls", "island_walls", "swirl_walls"]
 
 
 # ── wall-geometry generators (interior (row,col) coords, 0-indexed) ──────────
@@ -65,7 +65,7 @@ _SYM_UPPER = [(0.00, 0.30), (0.12, 0.285), (0.26, 0.305), (0.40, 0.29), (0.54, 0
               (0.66, 0.315), (0.72, 0.37), (0.725, 0.45)]
 
 
-def symmetric_walls(size):
+def chicane_walls(size):
     pts = [(round(y * (size - 1)), round(x * (size - 1))) for (x, y) in _SYM_UPPER]
     walls = set()
     for i in range(len(pts) - 1):
@@ -88,6 +88,28 @@ def _connected_to_goal(walls, size):
             if nb in free and nb not in seen:
                 seen.add(nb); q.append(nb)
     return len(seen) == len(free)
+
+
+def _component(seed, walls, size):
+    """Free cells reachable from seed (4-connected)."""
+    if seed in walls:
+        return set()
+    seen = {seed}; q = deque(seen)
+    while q:
+        r, c = q.popleft()
+        for dr, dc in _DELTA.values():
+            nb = (r + dr, c + dc)
+            if (0 <= nb[0] < size and 0 <= nb[1] < size
+                    and nb not in walls and nb not in seen):
+                seen.add(nb); q.append(nb)
+    return seen
+
+
+def _start_reaches_goal(walls, size):
+    """True if (0,0) can reach the bottom-right goal over free cells."""
+    if (0, 0) in walls or (size - 1, size - 1) in walls:
+        return False
+    return (size - 1, size - 1) in _component((0, 0), walls, size)
 
 
 def island_walls(size, n_islands=None, seed=1, max_block=2):
@@ -138,10 +160,36 @@ def swirl_walls(size):
     """
     big = _arc(0.62, 0.62, 0.45, 170, 280, size)     # centre on diagonal
     blade = _arc(0.78, 0.20, 0.27, 42, 143, size)    # right-edge blade
+    # the blade's outer tip can land one cell short of the border (rounding), so
+    # extend the rightmost blade cell straight to the right edge; the diagonal
+    # transpose below then closes the matching bottom-edge gap too.
+    tr, tc = max(blade, key=lambda rc: rc[1])
+    blade |= {(tr, c) for c in range(tc, size)}
     w = big | blade
     w |= {(c, r) for (r, c) in w}                     # main-diagonal symmetry
     w.discard((0, 0)); w.discard((size - 1, size - 1))
-    return frozenset((r, c) for (r, c) in w if 0 <= r < size and 0 <= c < size)
+    w = {(r, c) for (r, c) in w if 0 <= r < size and 0 <= c < size}
+    # On small grids the blades close into an L that seals the goal corner. Punch
+    # the doorway at the INNER end (nearest the bend) so the blades still reach the
+    # grid edges, and keep it diagonal-symmetric. No-op once the grid is large
+    # enough to be solvable, so bigger swirls are unchanged.
+    goal = (size - 1, size - 1)
+    while not _start_reaches_goal(w, size):
+        Rs = _component((0, 0), w, size)
+        Rg = _component(goal, w, size)
+        frontier = [(r, c) for (r, c) in w
+                    if any((r + dr, c + dc) in Rs for dr, dc in _DELTA.values())
+                    and any((r + dr, c + dc) in Rg for dr, dc in _DELTA.values())]
+        if not frontier:
+            break
+        inner = min(r + c for (r, c) in frontier)            # nearest the bend/center
+        drop = {(r, c) for (r, c) in frontier if r + c == inner}
+        drop |= {(c, r) for (r, c) in drop}                  # keep diagonal symmetry
+        drop &= w
+        if not drop:
+            break
+        w -= drop
+    return frozenset(w)
 
 
 # ── real MiniGrid env layouts ────────────────────────────────────────────────
@@ -178,20 +226,20 @@ class _LayoutEnv(MiniGridEnv):
         self.mission = _mission()
 
 
-class OpenEnv(_LayoutEnv):
+class EmptyEnv(_LayoutEnv):
     pass
+
+
+class NarrowEnv(_LayoutEnv):
+    @staticmethod
+    def wall_fn(inner):
+        return narrow_walls(inner, inner)
 
 
 class ChicaneEnv(_LayoutEnv):
     @staticmethod
     def wall_fn(inner):
-        return chicane_walls(inner, inner)
-
-
-class SymmetricEnv(_LayoutEnv):
-    @staticmethod
-    def wall_fn(inner):
-        return symmetric_walls(inner)
+        return chicane_walls(inner)
 
 
 class IslandsEnv(_LayoutEnv):
@@ -236,7 +284,7 @@ class SimpleEnv(MiniGridEnv):
         self.mission = "grand mission"
 
 
-MINIGRID_ENVS = {"open": OpenEnv, "chicane": ChicaneEnv, "symmetric": SymmetricEnv,
+MINIGRID_ENVS = {"empty": EmptyEnv, "narrow": NarrowEnv, "chicane": ChicaneEnv,
                  "islands": IslandsEnv, "swirl": SwirlEnv, "simple": SimpleEnv}
 
 
@@ -267,7 +315,7 @@ def extract_layout(mg_env):
 class _StudyGrid(ObstacleGridWorld):
     """Dense (row,col)x4 MDP whose walls are extracted from a MiniGrid layout."""
 
-    minigrid_cls = OpenEnv
+    minigrid_cls = EmptyEnv
 
     def __init__(self, size=20, random_start=False):
         self.minigrid = self.minigrid_cls(inner_size=size)
@@ -275,16 +323,16 @@ class _StudyGrid(ObstacleGridWorld):
         super().__init__(inner, inner, walls=walls, random_start=random_start)
 
 
-class OpenGrid(_StudyGrid):
-    minigrid_cls = OpenEnv
+class EmptyGrid(_StudyGrid):
+    minigrid_cls = EmptyEnv
+
+
+class NarrowGrid(_StudyGrid):
+    minigrid_cls = NarrowEnv
 
 
 class ChicaneGrid(_StudyGrid):
     minigrid_cls = ChicaneEnv
-
-
-class SymmetricGrid(_StudyGrid):
-    minigrid_cls = SymmetricEnv
 
 
 class IslandsGrid(_StudyGrid):
@@ -295,5 +343,5 @@ class SwirlGrid(_StudyGrid):
     minigrid_cls = SwirlEnv
 
 
-LAYOUTS = {"open": OpenGrid, "chicane": ChicaneGrid, "symmetric": SymmetricGrid,
+LAYOUTS = {"empty": EmptyGrid, "narrow": NarrowGrid, "chicane": ChicaneGrid,
            "islands": IslandsGrid, "swirl": SwirlGrid}

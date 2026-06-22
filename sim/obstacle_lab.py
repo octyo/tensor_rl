@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Obstacle-maze lab: runs the full CP-vs-tabular battery on the chicane maze and
+Obstacle-maze lab: runs the full CP-vs-tabular battery on the narrow maze and
 drops every artifact into data/obstacle_report/.
 
 Same tests as the open-grid experiments, obstacle-aware:
@@ -51,7 +51,7 @@ CP_COLORS = ["#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e"]
 
 # ── env factories ────────────────────────────────────────────────────────────
 
-# set in main() per chosen layout; None -> ObstacleGridWorld's default chicane walls
+# set in main() per chosen layout; None -> ObstacleGridWorld's default narrow walls
 WALLS_OVERRIDE = None
 OUT_DIR = REPORT_DIR
 
@@ -342,7 +342,7 @@ def _save_capture(cap, tab_params, ranks, layout, grid, out_path):
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--layout", choices=list(LAYOUTS), default="chicane",
+    p.add_argument("--layout", choices=list(LAYOUTS), default="narrow",
                    help="which layout to run the battery on")
     p.add_argument("--size", type=int, default=20)
     p.add_argument("--episodes", type=int, default=10000)

@@ -11,7 +11,7 @@ SIZES = [8, 12, 16, 24, 32, 48]
 
 
 def layouts(s):
-    base = ["open", "chicane", "symmetric", "islands"]
+    base = ["empty", "narrow", "chicane", "islands"]
     return base + (["swirl"] if s >= 12 else [])   # swirl needs >=11
 
 
