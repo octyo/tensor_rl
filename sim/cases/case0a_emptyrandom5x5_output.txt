@@ -1,0 +1,28 @@
+Case 0a (Empty-Random-5x5): Baseline Double DQN  (env=MiniGrid-Empty-Random-5x5-v0, episodes=200, seeds=[42, 43, 44])
+env=MiniGrid-Empty-Random-5x5-v0
+
+Environment : MiniGrid-Empty-Random-5x5-v0
+Agent       : double_dqn
+Episodes    : 100 per seed   Seeds: [42, 43, 44]
+
+Config      Params    vs_std    Solve%        Reward           
+----------------------------------------------------------------------------
+h64         9927      0.27      95% +/- 5%    0.847 +/- 0.029  
+h128        19847     0.55      95% +/- 5%    0.853 +/- 0.051  
+h64x64      14087     0.39      95% +/- 3%    0.855 +/- 0.043  
+h128x128    36359     1.00      95% +/- 4%    0.867 +/- 0.022  
+----------------------------------------------------------------------------
+
+Training convergence (mean reward in each 10% episode bucket):
+Config      10%      20%      30%      40%      50%      60%      70%      80%      90%      100%   
+----------------------------------------------------------------------------
+h64         0.364    0.468    0.450    0.528    0.647    0.765    0.845    0.783    0.850    0.837  
+h128        0.373    0.465    0.508    0.564    0.697    0.815    0.829    0.775    0.851    0.883  
+h64x64      0.320    0.579    0.524    0.606    0.752    0.801    0.837    0.809    0.823    0.901  
+h128x128    0.408    0.440    0.687    0.763    0.679    0.802    0.822    0.871    0.851    0.874  
+----------------------------------------------------------------------------
+
+Standard baseline: h128x128 = 36359 params
+Algorithm: double_dqn (Polyak target update, SmoothL1 loss)
+Task: reach randomised goal position (new position each episode)
+Total runtime: 2.4 min

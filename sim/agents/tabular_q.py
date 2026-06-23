@@ -51,7 +51,6 @@ class _TensorTabularBase:
 
         delta = (reward + self.gamma * best_next) - current_q
         # Clip TD error tightly — multiplicative factor updates amplify large deltas
-        delta = float(np.clip(delta, -1.0, 1.0))
         self._update_params(idx, action, delta)
         self.steps += 1
 
@@ -72,13 +71,14 @@ class CPMultiTabularQAgent(_TensorTabularBase):
     For N=1 this is identical to TensorizedTabularQAgent.
     """
 
-    def __init__(self, state_dims, action_space_size, rank=4, lr=0.1, gamma=0.99,
+    def __init__(self, state_dims, action_space_size, rank=4, lr=0.3, gamma=0.99,
                  epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000):
         super().__init__(state_dims, action_space_size, rank, lr, gamma,
                          epsilon_start, epsilon_end, epsilon_decay_steps)
-        scale = 1.0 / np.sqrt(np.prod(state_dims))
-        self.factors = [np.random.uniform(-scale, scale, (d, rank)) for d in state_dims]
-        self.factor_a = np.random.uniform(-scale, scale, (action_space_size, rank))
+        N = len(state_dims) + 1  # state modes + action mode
+        sigma = rank ** (-1.0 / (2 * N))
+        self.factors = [np.random.normal(0, sigma, (d, rank)) for d in state_dims]
+        self.factor_a = np.random.normal(0, sigma, (action_space_size, rank))
 
     def _hadamard(self, idx) -> np.ndarray:
         """Element-wise product of factor rows across all state modes → shape (rank,)."""
@@ -93,32 +93,29 @@ class CPMultiTabularQAgent(_TensorTabularBase):
     def _q_val(self, idx, action) -> float:
         return float(self._hadamard(idx) @ self.factor_a[action])
 
-    _MAX_FACTOR_NORM = 3.0  # clip factor rows to prevent blowup in bilinear updates
-
     def _update_params(self, idx, action, delta: float):
-        f = [self.factors[n][idx[n]].copy() for n in range(len(self.state_dims))]
-        fa = self.factor_a[action].copy()
+        rows = [self.factors[n][idx[n]] for n in range(len(self.state_dims))]
+        rows_a = self.factor_a[action]
 
+        # leave-one-out gradients for each state mode
+        grads = []
         for n in range(len(self.state_dims)):
-            grad = fa.copy()
-            for m, fm in enumerate(f):
+            loo = rows_a.copy()
+            for m, r in enumerate(rows):
                 if m != n:
-                    grad *= fm
-            self.factors[n][idx[n]] += self.lr * delta * grad
-            # clip row norm
-            row = self.factors[n][idx[n]]
-            norm = np.linalg.norm(row)
-            if norm > self._MAX_FACTOR_NORM:
-                self.factors[n][idx[n]] *= self._MAX_FACTOR_NORM / norm
+                    loo = loo * r
+            grads.append(loo)
+        # gradient for action mode
+        grad_a = np.ones(self.rank)
+        for r in rows:
+            grad_a = grad_a * r
+        grads.append(grad_a)
 
-        h = np.ones(self.rank)
-        for fm in f:
-            h *= fm
-        self.factor_a[action] += self.lr * delta * h
-        row = self.factor_a[action]
-        norm = np.linalg.norm(row)
-        if norm > self._MAX_FACTOR_NORM:
-            self.factor_a[action] *= self._MAX_FACTOR_NORM / norm
+        # NLMS: normalize by total squared gradient norm so ΔQ ≈ lr·δ
+        norm2 = sum(float((g * g).sum()) for g in grads) + 1e-8
+        for n in range(len(self.state_dims)):
+            self.factors[n][idx[n]] += self.lr * delta * grads[n] / norm2
+        self.factor_a[action] += self.lr * delta * grads[-1] / norm2
 
 
 class SarsaCPAgent(CPMultiTabularQAgent):
@@ -364,7 +361,7 @@ class TensorizedTabularQAgent(TabularQAgent):
     TD updates apply a rank-1 gradient step on the relevant rows of each factor.
     """
 
-    def __init__(self, state_space_size, action_space_size, rank=4, lr=0.1, gamma=0.99,
+    def __init__(self, state_space_size, action_space_size, rank=4, lr=0.3, gamma=0.99,
                  epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_steps=10000, seed=None):
         # Skip TabularQAgent.__init__ to avoid allocating the full Q-table
         self.action_space_size = action_space_size
@@ -380,9 +377,10 @@ class TensorizedTabularQAgent(TabularQAgent):
             random.seed(seed)
             np.random.seed(seed)
 
-        scale = 1.0 / np.sqrt(state_space_size)
-        self.factor_s = np.random.uniform(-scale, scale, (state_space_size, rank))
-        self.factor_a = np.random.uniform(-scale, scale, (action_space_size, rank))
+        # σ = R^{-1/(2N)} with N=2 modes (state, action) → unit-variance reconstructed cells
+        sigma = rank ** (-1.0 / 4.0)
+        self.factor_s = np.random.normal(0, sigma, (state_space_size, rank))
+        self.factor_a = np.random.normal(0, sigma, (action_space_size, rank))
 
     @property
     def q_table(self):
@@ -404,12 +402,13 @@ class TensorizedTabularQAgent(TabularQAgent):
         target = reward + self.gamma * best_next
         delta = target - current_q
 
-        # Capture pre-update factors for the symmetric gradient step
         fs = self.factor_s[state].copy()
         fa = self.factor_a[action].copy()
 
-        self.factor_s[state] += self.lr * delta * fa
-        self.factor_a[action] += self.lr * delta * fs
+        # NLMS: two modes → norm2 = ‖fa‖² + ‖fs‖²
+        norm2 = float(fa @ fa) + float(fs @ fs) + 1e-8
+        self.factor_s[state] += self.lr * delta * fa / norm2
+        self.factor_a[action] += self.lr * delta * fs / norm2
 
         self.steps += 1
 
@@ -430,7 +429,8 @@ class SarsaTensorAgent(TensorizedTabularQAgent):
         fs = self.factor_s[state].copy()
         fa = self.factor_a[action].copy()
 
-        self.factor_s[state] += self.lr * delta * fa
-        self.factor_a[action] += self.lr * delta * fs
+        norm2 = float(fa @ fa) + float(fs @ fs) + 1e-8
+        self.factor_s[state] += self.lr * delta * fa / norm2
+        self.factor_a[action] += self.lr * delta * fs / norm2
 
         self.steps += 1

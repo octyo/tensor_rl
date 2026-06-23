@@ -26,21 +26,28 @@ def _decompose_linear(weight: torch.Tensor, bias: torch.Tensor,
                       tt_dims: tuple = None) -> nn.Module:
     """Decompose one linear layer's weight into a factorized layer."""
     out_features, in_features = weight.shape
-    W = weight.detach()
+    W = weight.detach().float()
 
     if method == "cp":
-        # parafac returns a CPTensor; .factors is [factor_out (out,R), factor_in (in,R)]
-        # tensorly parafac on a 2D matrix gives 2 factors
+        # parafac returns CPTensor with .weights (rank,) and .factors (unit-norm columns).
+        # Reconstruction: W ≈ (factors[0] * weights) @ factors[1].T
+        # Absorb weights into factor_out so CPLinear.forward (x @ f_in @ f_out.T) is exact.
         cp_tensor = parafac(W, rank=rank, init='svd', n_iter_max=100, tol=1e-6)
-        factors = cp_tensor.factors  # list of 2 tensors: [out_features×rank, in_features×rank]
+        factors  = cp_tensor.factors   # [out×R, in×R], unit-norm columns
+        weights  = cp_tensor.weights   # (R,) scale factors
         layer = CPLinear(in_features, out_features, rank=rank)
         with torch.no_grad():
-            layer.factor_out.copy_(factors[0])
-            layer.factor_in.copy_(factors[1])
+            layer.factor_out.copy_((factors[0] * weights.unsqueeze(0)).float())
+            layer.factor_in.copy_(factors[1].float())
             if bias is not None:
-                layer.bias.copy_(bias.detach())
+                layer.bias.copy_(bias.detach().float())
             else:
                 layer.bias.zero_()
+        # Sanity: reconstruction error should be small
+        W_hat = (layer.factor_out @ layer.factor_in.t())
+        err = (W_hat - W).abs().max().item()
+        if err > 0.5:
+            print(f"  [compress] CP recon error={err:.4f} (rank={rank} may be too low)")
         return layer
 
     elif method == "tucker":
@@ -49,53 +56,89 @@ def _decompose_linear(weight: torch.Tensor, bias: torch.Tensor,
         rank_out, rank_in = core_t.shape
         layer = TuckerLinear(in_features, out_features, ranks=(rank_out, rank_in))
         with torch.no_grad():
-            layer.core.copy_(core_t)
-            layer.factor_out.copy_(factors[0])
-            layer.factor_in.copy_(factors[1])
+            layer.core.copy_(core_t.float())
+            layer.factor_out.copy_(factors[0].float())
+            layer.factor_in.copy_(factors[1].float())
             if bias is not None:
-                layer.bias.copy_(bias.detach())
+                layer.bias.copy_(bias.detach().float())
             else:
                 layer.bias.zero_()
+        # Sanity: W ≈ factor_out @ core @ factor_in.T
+        W_hat = layer.factor_out @ layer.core @ layer.factor_in.t()
+        err = (W_hat - W).abs().max().item()
+        if err > 0.5:
+            print(f"  [compress] Tucker recon error={err:.4f} (rank={rank} may be too low)")
         return layer
 
     elif method in ("tt", "mps"):
-        # Reshape W into higher-order tensor, then apply TT decomposition
-        if tt_dims is not None:
+        # Match MPSLinear's core format: N cores each (r_left, d_in_n, d_out_n, r_right).
+        # Strategy: reshape W.T → (*in_dims, *out_dims), permute to interleaved
+        # (d_in_0, d_out_0, ...), merge each (d_in_n, d_out_n) into one mode, then
+        # apply tensor_train to get N cores of shape (r_left, d_in_n*d_out_n, r_right),
+        # finally reshape each core to (r_left, d_in_n, d_out_n, r_right).
+        if tt_dims is not None and math.prod(tt_dims) == in_features:
             in_dims = tuple(tt_dims)
-            assert math.prod(in_dims) == in_features
             out_dims = auto_factor_dims(out_features, len(in_dims))
         else:
-            n_modes = max(2, round(math.log2(min(in_features, out_features)) / 2))
-            in_dims = auto_factor_dims(in_features, n_modes)
-            out_dims = auto_factor_dims(out_features, n_modes)
+            # Try decreasing n_modes until the effective (achievable) rank >= requested.
+            # auto_factor_dims can pad with 1s, which creates tiny merged modes that cap bonds.
+            n_modes_base = max(2, round(math.log2(min(in_features, out_features)) / 2))
+            in_dims, out_dims = None, None
+            eff_rank = 1
+            for nm in range(n_modes_base, 1, -1):
+                _in  = auto_factor_dims(in_features, nm)
+                _out = auto_factor_dims(out_features, nm)
+                merged = [di * do for di, do in zip(_in, _out)]
+                # max achievable bond at position i: min(prod_left, prod_right)
+                er = rank
+                for i in range(nm - 1):
+                    left  = math.prod(merged[:i + 1])
+                    right = math.prod(merged[i + 1:])
+                    er = min(er, left, right)
+                in_dims, out_dims, eff_rank = _in, _out, er
+                if er >= rank:
+                    break
 
         N = len(in_dims)
-        # Reshape W(out, in) → (d_in_0, d_in_1, ..., d_out_0, d_out_1, ...) for TT decomp
-        # We interleave in/out dims: (d_in_0, d_out_0, d_in_1, d_out_1, ...)
-        interleaved_shape = []
-        for i in range(N):
-            interleaved_shape.extend([in_dims[i], out_dims[i]])
+        merged_shape = [in_dims[n] * out_dims[n] for n in range(N)]
+        # Clamp rank to what's actually achievable for this tensor shape
+        eff_rank = rank
+        for i in range(N - 1):
+            eff_rank = min(eff_rank,
+                           math.prod(merged_shape[:i + 1]),
+                           math.prod(merged_shape[i + 1:]))
 
-        W_reshaped = W.T.reshape(in_features, out_features)
-        W_reshaped = W_reshaped.reshape(*in_dims, *out_dims)
+        # W.T: (in_features, out_features) → (*in_dims, *out_dims)
+        W_nd = W.t().reshape(*in_dims, *out_dims)
         # Permute to interleaved: (d_in_0, d_out_0, d_in_1, d_out_1, ...)
         perm = []
         for i in range(N):
             perm.extend([i, N + i])
-        W_interleaved = W_reshaped.permute(*perm).reshape(*interleaved_shape)
+        W_interleaved = W_nd.permute(*perm).contiguous()
+        # Merge each (d_in_n, d_out_n) pair into one mode
+        W_merged = W_interleaved.reshape(*merged_shape)
 
-        # TT rank = [1, rank, rank, ..., rank, 1]
-        tt_rank = [1] + [rank] * (len(interleaved_shape) - 1) + [1]
-        tt_tensor = tensor_train(W_interleaved, rank=tt_rank)
-        # tt_tensor.factors: list of N*2 cores
+        # TT decomposition: uniform bond = eff_rank
+        tt_rank = [1] + [eff_rank] * (N - 1) + [1]
+        tt_tensor = tensor_train(W_merged, rank=tt_rank)
 
-        # Build MPSLinear and copy cores
-        layer = MPSLinear(in_features, out_features, rank=rank, tt_dims=tt_dims)
+        # Pass the in_dims we actually used for decomposition so MPSLinear uses the same modes.
+        layer = MPSLinear(in_features, out_features, rank=eff_rank, tt_dims=in_dims)
         with torch.no_grad():
+            for n, core in enumerate(tt_tensor.factors):
+                # core: (r_left, d_in_n * d_out_n, r_right)
+                r_l, _, r_r = core.shape
+                reshaped = core.reshape(r_l, in_dims[n], out_dims[n], r_r).float()
+                layer.cores[n].data.copy_(reshaped)
             if bias is not None:
-                layer.bias.copy_(bias.detach())
+                layer.bias.copy_(bias.detach().float())
             else:
                 layer.bias.zero_()
+        # Sanity: build weight from cores and compare
+        W_hat = layer._build_weight()
+        err = (W_hat - W).abs().max().item()
+        if err > 0.5:
+            print(f"  [compress] MPS recon error={err:.4f} (eff_rank={eff_rank})")
         return layer
 
     else:

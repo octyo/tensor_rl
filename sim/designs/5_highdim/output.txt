@@ -1,0 +1,20 @@
+Design 5: High-Dimensional (10D) Navigation
+============================================================
+
+  baseline                   params=  23060  solve=0%  reward=-0.001
+  cp_flat_r2                 params=   1400  solve=0%  reward=0.015
+  cp_flat_r8                 params=   4772  solve=0%  reward=0.006
+  cp_flat_r16                params=   9268  solve=0%  reward=0.015
+  tucker_flat_r2             params=   1412  solve=18%  reward=0.235
+  tucker_flat_r8             params=   4964  solve=0%  reward=0.001
+  tucker_flat_r16            params=  10036  solve=0%  reward=-0.000
+  cp_qfunc_r4                params=    220  solve=24%  reward=0.316
+  cp_qfunc_r8                params=    420  solve=22%  reward=0.291
+  cp_qfunc_r32               params=   1620  solve=26%  reward=0.333
+  embed_tt_r4                params=  20796  solve=0%  reward=-0.001
+  embed_tt_r8                params=  22372  solve=0%  reward=-0.017
+  embed_tt_r16               params=  25524  solve=0%  reward=-0.003
+  embed_cp_r4                params=  19784  solve=0%  reward=-0.006
+  embed_cp_r8                params=  20348  solve=0%  reward=0.008
+  embed_cp_r16               params=  21476  solve=0%  reward=-0.033
+

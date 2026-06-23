@@ -26,5 +26,5 @@ EPSILON_DELAY = 300            # steps at epsilon_start before decay begins (cou
 
 # --- Target network ---
 # DQN: hard copy every N steps; Double/Dueling: soft Polyak update every step
-TARGET_UPDATE_INTERVAL = 1000  # DQN hard update frequency
+TARGET_UPDATE_INTERVAL = 200   # DQN hard update frequency (lower = more stable on short episodes)
 TAU = 0.05                     # Polyak rate for Double/Dueling (course uses 0.08)

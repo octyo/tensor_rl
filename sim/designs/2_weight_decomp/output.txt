@@ -1,0 +1,40 @@
+Design 2: Weight Decomposition
+============================================================
+
+MiniGrid-Empty-5x5-v0  2A_cp_r2  params=1595  solve=23%  reward=0.226
+MiniGrid-Empty-5x5-v0  2A_cp_r4  params=2927  solve=64%  reward=0.551
+MiniGrid-Empty-5x5-v0  2A_cp_r8  params=5591  solve=96%  reward=0.851
+MiniGrid-Empty-5x5-v0  2A_cp_r16  params=10919  solve=99%  reward=0.863
+MiniGrid-Empty-5x5-v0  2A_tucker_r2  params=1607  solve=34%  reward=0.295
+MiniGrid-Empty-5x5-v0  2A_tucker_r4  params=2975  solve=30%  reward=0.291
+MiniGrid-Empty-5x5-v0  2A_tucker_r8  params=5768  solve=39%  reward=0.369
+MiniGrid-Empty-5x5-v0  2A_tucker_r16  params=11480  solve=97%  reward=0.892
+MiniGrid-Empty-5x5-v0  2B_tensor_r2  params=2097  solve=96%  reward=0.841
+MiniGrid-Empty-5x5-v0  2B_tensor_r4  params=9355  solve=94%  reward=0.825
+MiniGrid-Empty-5x5-v0  2B_tensor_r8  params=67215  solve=96%  reward=0.836
+MiniGrid-Empty-5x5-v0  2B_tensor_r16  params=529687  solve=96%  reward=0.836
+MiniGrid-DoorKey-5x5-v0  2A_cp_r2  params=1595  solve=0%  reward=0.013
+MiniGrid-DoorKey-5x5-v0  2A_cp_r4  params=2927  solve=0%  reward=0.000
+MiniGrid-DoorKey-5x5-v0  2A_cp_r8  params=5591  solve=13%  reward=0.116
+MiniGrid-DoorKey-5x5-v0  2A_cp_r16  params=10919  solve=0%  reward=0.003
+MiniGrid-DoorKey-5x5-v0  2A_tucker_r2  params=1607  solve=0%  reward=0.002
+MiniGrid-DoorKey-5x5-v0  2A_tucker_r4  params=2975  solve=0%  reward=0.010
+MiniGrid-DoorKey-5x5-v0  2A_tucker_r8  params=5768  solve=1%  reward=0.007
+MiniGrid-DoorKey-5x5-v0  2A_tucker_r16  params=11480  solve=0%  reward=0.007
+MiniGrid-DoorKey-5x5-v0  2B_tensor_r2  params=2097  solve=3%  reward=0.026
+MiniGrid-DoorKey-5x5-v0  2B_tensor_r4  params=9355  solve=30%  reward=0.258
+MiniGrid-DoorKey-5x5-v0  2B_tensor_r8  params=67215  solve=30%  reward=0.261
+MiniGrid-DoorKey-5x5-v0  2B_tensor_r16  params=529687  solve=40%  reward=0.374
+MiniGrid-DistShift1-v0  2A_cp_r2  params=1595  solve=1%  reward=0.018
+MiniGrid-DistShift1-v0  2A_cp_r4  params=2927  solve=22%  reward=0.175
+MiniGrid-DistShift1-v0  2A_cp_r8  params=5591  solve=4%  reward=0.040
+MiniGrid-DistShift1-v0  2A_cp_r16  params=10919  solve=57%  reward=0.514
+MiniGrid-DistShift1-v0  2A_tucker_r2  params=1607  solve=23%  reward=0.218
+MiniGrid-DistShift1-v0  2A_tucker_r4  params=2975  solve=8%  reward=0.077
+MiniGrid-DistShift1-v0  2A_tucker_r8  params=5768  solve=26%  reward=0.221
+MiniGrid-DistShift1-v0  2A_tucker_r16  params=11480  solve=20%  reward=0.175
+MiniGrid-DistShift1-v0  2B_tensor_r2  params=2097  solve=46%  reward=0.420
+MiniGrid-DistShift1-v0  2B_tensor_r4  params=9355  solve=78%  reward=0.690
+MiniGrid-DistShift1-v0  2B_tensor_r8  params=67215  solve=78%  reward=0.706
+MiniGrid-DistShift1-v0  2B_tensor_r16  params=529687  solve=63%  reward=0.574
+

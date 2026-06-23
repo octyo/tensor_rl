@@ -1,0 +1,7 @@
+Design 0: Standard Double DQN Baseline
+============================================================
+
+MiniGrid-Empty-5x5-v0  baseline_128x128  params=36359  solve=97%  reward=0.853
+MiniGrid-DoorKey-5x5-v0  baseline_128x128  params=36359  solve=6%  reward=0.055
+MiniGrid-DistShift1-v0  baseline_128x128  params=36359  solve=62%  reward=0.542
+

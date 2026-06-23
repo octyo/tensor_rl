@@ -1,0 +1,14 @@
+Case 0: Baseline DQN  (env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44])
+env=MiniGrid-Empty-5x5-v0
+
+Config      Params    vs_std    Solve%         Reward           
+----------------------------------------------------------------------------
+h64         9927      0.27      57% +/- 14%    0.496 +/- 0.118  
+h128        19847     0.55      83% +/- 9%     0.742 +/- 0.066  
+h64x64      14087     0.39      95% +/- 7%     0.811 +/- 0.043  
+h128x128    36359     1.00      95% +/- 2%     0.860 +/- 0.026  
+----------------------------------------------------------------------------
+
+Standard baseline: h128x128 = 36359 params
+env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44], algo=double_dqn
+Total runtime: 7.7 min
