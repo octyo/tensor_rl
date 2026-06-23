@@ -18,6 +18,7 @@ Run standalone for a rank sweep and comparison with the tabular baseline:
     python cp_agent.py --ranks 1 2 4 8 16 --episodes 2000 --seeds 5
 """
 
+
 import argparse
 import json
 import os
@@ -192,6 +193,87 @@ class CPGridQAgent:
         """
         return np.einsum('ir,jr,kr->ijk',
                          self.factors[0], self.factors[1], self.factors[2])
+
+
+# ── Target-network CP agent (deadly-triad fix) ──────────────────────────────────
+
+class CPTargetGridQAgent(CPGridQAgent):
+    """CP Q-agent that fixes the deadly-triad instability of the plain CP agent.
+
+    Because a CP factor row is shared across many cells, every online update also
+    moves the bootstrap target -> the agent chases its own tail and can collapse
+    (peaks then falls apart). The fix (cf. Mads' note / Sutton & Barto ch. 11) is a
+    *target network*: keep a frozen copy of the factors, compute the TD target from
+    the copy, and refresh the copy only every `target_update_interval` steps.
+
+    Extras that further stabilise it:
+      - learning-rate decay:   lr_t = lr0 / (1 + lr_decay * t)
+      - factor rebalancing:    equalise the per-rank column norms across the three
+                               modes at each refresh (CP scaling is gauge-free, so
+                               this changes nothing in Q but stops overflow)
+      - expected_sarsa:        optional softer target (E_pi[Q] under eps-greedy)
+                               instead of the hard max; off by default (the project
+                               uses off-policy Q-learning).
+
+    The old CPGridQAgent is left untouched so both can be compared.
+    """
+
+    def __init__(self, rows: int, cols: int, rank: int = 4,
+                 lr: float = 0.4, gamma: float = 0.99,
+                 epsilon_start: float = 1.0, epsilon_min: float = 0.05,
+                 epsilon_decay: float = 0.995,
+                 target_update_interval: int = 200, lr_decay: float = 0.0,
+                 expected_sarsa: bool = False):
+        super().__init__(rows, cols, rank=rank, lr=lr, gamma=gamma,
+                         epsilon_start=epsilon_start, epsilon_min=epsilon_min,
+                         epsilon_decay=epsilon_decay)
+        self.target_update_interval = target_update_interval
+        self.lr0 = lr
+        self.lr_decay = lr_decay
+        self.expected_sarsa = expected_sarsa
+        self._t = 0
+        self.target_factors = [f.copy() for f in self.factors]
+
+    def _q_all_actions_target(self, state: tuple) -> np.ndarray:
+        r, c = state
+        h = self.target_factors[0][r] * self.target_factors[1][c]
+        return h @ self.target_factors[2].T
+
+    def _rebalance(self):
+        """Equalise per-rank column norms across modes (preserves the represented Q)."""
+        for r in range(self.rank):
+            norms = [float(np.linalg.norm(f[:, r])) for f in self.factors]
+            prod = norms[0] * norms[1] * norms[2]
+            if prod < 1e-12:
+                continue
+            g = prod ** (1.0 / 3.0)
+            for d in range(3):
+                self.factors[d][:, r] *= g / (norms[d] + 1e-12)
+
+    def update(self, state: tuple, action: int, reward: float,
+               next_state: tuple, done: bool) -> float:
+        self._t += 1
+        if done:
+            target = reward
+        else:
+            q_next = self._q_all_actions_target(next_state)   # bootstrap from frozen copy
+            if self.expected_sarsa:
+                eps = self.epsilon
+                pi = np.full(NUM_ACTIONS, eps / NUM_ACTIONS)
+                pi[int(np.argmax(q_next))] += 1.0 - eps
+                boot = float(pi @ q_next)
+            else:
+                boot = float(np.max(q_next))
+            target = reward + self.gamma * boot
+
+        lr_t = self.lr0 / (1.0 + self.lr_decay * self._t)
+        sa_index = (state[0], state[1], action)
+        delta = td_update(self.factors, sa_index, target, lr_t)
+
+        if self._t % self.target_update_interval == 0:
+            self._rebalance()
+            self.target_factors = [f.copy() for f in self.factors]
+        return delta
 
 
 # ── Training loop ──────────────────────────────────────────────────────────────
