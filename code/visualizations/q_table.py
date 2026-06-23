@@ -35,13 +35,25 @@ def _value_color(t):
     return _RAMP[int(np.clip(t, 0, 1) * 255)]
 
 
-def _make_q_values(seed=7):
-    """A plausible, structured Q-table (values grow toward a goal)."""
+def _make_q_values(seed=7, gamma=0.99):
+    """A plausible Q-table for the -1/step gridworld.
+
+    Reward is -1 per step and 0 at the goal, so every Q-value is <= 0: the value
+    of the optimal action in a state d steps from the goal is the discounted
+    step cost -(1 - gamma**d)/(1 - gamma) (0 at the goal, more negative the
+    farther away).  Sub-optimal actions waste a step and are a little more
+    negative still, so the greedy (least-negative) action points toward the goal.
+    """
     rng = np.random.default_rng(seed)
-    base = np.linspace(0.2, 0.9, N_STATES)[:, None]          # closer to goal -> higher
-    pref = rng.uniform(-0.15, 0.25, (N_STATES, len(ACTIONS)))  # per-action spread
-    q = base + pref
-    return np.round(np.clip(q, 0, 1) * 10 - 1, 1)            # spread into a readable range
+    goal = (_GRID_W - 1, (N_STATES - 1) // _GRID_W)             # bottom-right cell
+    q = np.zeros((N_STATES, len(ACTIONS)))
+    for i in range(N_STATES):
+        x, y = i % _GRID_W, i // _GRID_W
+        d = abs(goal[0] - x) + abs(goal[1] - y)                # optimal steps to goal
+        best = -(1 - gamma ** d) / (1 - gamma)                 # value of the best action
+        q[i] = best - rng.uniform(0.0, 1.0, len(ACTIONS))      # others waste a step
+        q[i, rng.integers(len(ACTIONS))] = best                # one action is optimal
+    return np.round(q, 1) + 0.0                                # normalise -0.0 -> 0.0
 
 
 def build_q_table(q=None):

@@ -5,3 +5,5 @@ sim/data/
 data/
 sim/data_hpc/
 data_hpc/
+.DS_Store
+sim/data_nlms_backup/_local_legacy/minigrid_11x11_10000_swirl_fixed/curves.png
