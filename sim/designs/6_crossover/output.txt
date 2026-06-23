@@ -1,0 +1,15 @@
+Design 6: 8D Navigation (3^8=6561 states)
+============================================================
+
+  baseline                   params=  21776  solve=0%  reward=0.024
+  cp_flat_r4                 params=   2480  solve=82%  reward=1.138
+  cp_flat_r8                 params=   4688  solve=98%  reward=1.308
+  cp_flat_r16                params=   9104  solve=68%  reward=0.993
+  cp_qfunc_r4                params=    176  solve=4%  reward=0.199
+  cp_qfunc_r8                params=    336  solve=0%  reward=-0.076
+  cp_qfunc_r16               params=    656  solve=0%  reward=0.005
+  embed_tt_r4                params=  20272  solve=2%  reward=0.003
+  embed_tt_r8                params=  21840  solve=0%  reward=-0.022
+  embed_tt_r16               params=  24976  solve=0%  reward=0.047
+  embed_cp_r8                params=  19816  solve=100%  reward=1.329
+

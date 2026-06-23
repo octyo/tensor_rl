@@ -1,0 +1,29 @@
+Case 2b: Post-Hoc Compression  (env=MiniGrid-Empty-5x5-v0, train_eps=300, finetune_eps=50, seeds=[42, 43, 44])
+env=MiniGrid-Empty-5x5-v0
+
+Environment : MiniGrid-Empty-5x5-v0
+Agent       : double_dqn
+Episodes    : 100 per seed   Seeds: [42, 43, 44]
+
+Config        Params    vs_std    Compression    Solve%(no-ft)    Solve%(ft)     Reward(ft)       
+----------------------------------------------------------------------------
+standard      36359     1.00      -              -                100%           0.955 +/- 0.000  
+cp_r2         1595      0.044     4% of std      0% +/- 0%        33% +/- 47%    0.318 +/- 0.450  
+cp_r4         2927      0.081     8% of std      0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+cp_r8         5591      0.154     15% of std     0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+cp_r16        10919     0.300     30% of std     0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+tucker_r2     1607      0.044     4% of std      0% +/- 0%        33% +/- 47%    0.318 +/- 0.450  
+tucker_r4     2975      0.082     8% of std      0% +/- 0%        33% +/- 47%    0.318 +/- 0.450  
+tucker_r8     5768      0.159     16% of std     0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+tucker_r16    11480     0.316     32% of std     0% +/- 0%        33% +/- 47%    0.318 +/- 0.450  
+mps_r2        891       0.025     2% of std      0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+mps_r4        2055      0.057     6% of std      0% +/- 0%        67% +/- 47%    0.637 +/- 0.450  
+mps_r8        5223      0.144     14% of std     0% +/- 0%        33% +/- 47%    0.318 +/- 0.450  
+mps_r16       12871     0.354     35% of std     0% +/- 0%        0% +/- 0%      0.000 +/- 0.000  
+----------------------------------------------------------------------------
+
+Standard pre-compress: 36359 params, reward=0.955, solve=100%
+Training: 300 eps before compression  |  Fine-tune: 50 eps after compression
+Solve%(no-ft): greedy eval immediately after compression, no fine-tuning
+Solve%(ft) / Reward(ft): greedy eval after 50-episode fine-tune
+Total runtime: 8.1 min

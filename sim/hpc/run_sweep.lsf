@@ -1,0 +1,86 @@
+#!/bin/bash
+### DTU HPC (LSF) job array: CP-vs-tabular sweep over layouts x sizes x spawns.
+### One array task per (size, layout, spawn) -> 58 independent tasks.
+### Submit with:   bsub < sim/hpc/run_sweep.lsf
+###
+### Sizes: 8 12 16 24 32 48   (symmetric needs >=8, swirl needs >=12)
+### Episodes scale with size (~25*S^2). Each task writes one self-contained folder
+### sim/data/minigrid_{S}x{S}_{E}_{layout}_{spawn}/ (map, rank_capture, curves,
+### policymaps, video.mp4, video_multi.mp4).
+
+#BSUB -J minigrid_cp[1-58]
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -M 4GB
+#BSUB -W 6:00
+#BSUB -o sim/hpc/logs/%J_%I.out
+#BSUB -e sim/hpc/logs/%J_%I.err
+
+set -euo pipefail
+
+# Repo root. Works regardless of which directory you ran `bsub` from: start at
+# the submission dir (LS_SUBCWD) and walk up until we find sim/obstacle_lab.py.
+# Override by exporting REPO=/path/to/tensor_rl before bsub if you prefer.
+if [ -z "${REPO:-}" ]; then
+    REPO="${LS_SUBCWD:-$PWD}"
+    while [ "$REPO" != "/" ] && [ ! -f "$REPO/sim/obstacle_lab.py" ]; do
+        REPO="$(dirname "$REPO")"
+    done
+fi
+if [ ! -f "$REPO/sim/obstacle_lab.py" ]; then
+    echo "ERROR: could not locate repo root (no sim/obstacle_lab.py under $REPO)." >&2
+    echo "       export REPO=/path/to/tensor_rl before submitting." >&2
+    exit 1
+fi
+mkdir -p "$REPO/sim/hpc/logs"
+
+# ---------------------------------------------------------------------------
+# Environment. EDIT THESE for your HPC account.
+#   - needs: python3 with numpy, gymnasium, minigrid, matplotlib
+#   - needs: ffmpeg on PATH for the videos (else pass --no-videos below)
+# ---------------------------------------------------------------------------
+module load python3/3.11.9               # DTU HPC python (3.11 supports the type syntax)
+# module load ffmpeg/6.1                  # uncomment for video rendering, else use --no-videos
+# source $HOME/tensor_rl/code/venv/bin/activate   # or a venv with the deps
+# deps needed: numpy gymnasium minigrid matplotlib  (pip install --user ... if no venv)
+PYTHON=${PYTHON:-python3}
+
+# Each task is single-threaded (pure-Python training + tiny numpy arrays), so we
+# request -n 1 and pin the BLAS libs to 1 thread to avoid oversubscribing it.
+# Parallelism comes from the job array (58 tasks run concurrently), not per-task cores.
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+
+# ---------------------------------------------------------------------------
+# Map $LSB_JOBINDEX -> a single (size, layout, spawn, episodes, ...) config.
+# The same list is generated deterministically here and in list_configs.py;
+# if you change the sizes, re-run list_configs.py to get the new array range.
+# ---------------------------------------------------------------------------
+read SIZE LAYOUT SPAWN EPISODES MAXSTEPS EVAL SNAP < <($PYTHON - "$LSB_JOBINDEX" <<'PY'
+import sys
+idx = int(sys.argv[1])
+SIZES = [8, 12, 16, 24, 32, 48]
+def layouts(s):
+    base = ["open", "chicane", "symmetric", "islands"]
+    return base + (["swirl"] if s >= 12 else [])   # swirl needs >=11
+cfgs = []
+for s in SIZES:
+    for lay in layouts(s):
+        for sp in ["random", "fixed"]:
+            E = max(2000, round(25 * s * s / 1000) * 1000)
+            cfgs.append((s, lay, sp, E, 12 * s, max(100, E // 50), max(50, E // 200)))
+s, lay, sp, E, ms, ev, sn = cfgs[idx - 1]
+print(s, lay, sp, E, ms, ev, sn)
+PY
+)
+
+echo "[task $LSB_JOBINDEX] size=$SIZE layout=$LAYOUT spawn=$SPAWN episodes=$EPISODES"
+
+cd "$REPO/sim"
+
+$PYTHON obstacle_lab.py \
+    --layout "$LAYOUT" --size "$SIZE" --spawn "$SPAWN" \
+    --episodes "$EPISODES" --max-steps "$MAXSTEPS" \
+    --eval-every "$EVAL" --snap-every "$SNAP"
+    # add --no-videos if ffmpeg is not available on the cluster
