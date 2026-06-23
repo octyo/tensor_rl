@@ -35,15 +35,24 @@ _VOX_OPACITY = 0.92
 SHIFT = np.array([1.3, 0.0, 1.0])
 
 
-def _make_q_tensor(seed=7):
-    """Structured Q-tensor: value grows toward the (high-x, high-y) goal."""
+def _make_q_tensor(seed=7, gamma=0.99):
+    """Structured Q-tensor for the -1/step gridworld.
+
+    Reward is -1 per step and 0 at the (high-x, high-y) goal, so every Q-value
+    is <= 0: the optimal action d steps away is worth -(1 - gamma**d)/(1 - gamma)
+    (0 at the goal, more negative the farther off).  Sub-optimal actions waste a
+    step and sit a little lower, so the greedy (least-negative) action heads home.
+    """
     rng = np.random.default_rng(seed)
+    goal = (X - 1, Y - 1)
     q = np.zeros((X, Y, A))
     for x in range(X):
         for y in range(Y):
-            base = 0.2 + 0.7 * (0.6 * x / (X - 1) + 0.4 * y / (Y - 1))
-            q[x, y] = np.clip(base + rng.uniform(-0.12, 0.22, A), 0, 1)
-    return np.round(q * 10 - 1, 1)
+            d = abs(goal[0] - x) + abs(goal[1] - y)            # optimal steps to goal
+            best = -(1 - gamma ** d) / (1 - gamma)             # value of the best action
+            q[x, y] = best - rng.uniform(0.0, 1.0, A)          # others waste a step
+            q[x, y, rng.integers(A)] = best                    # one action is optimal
+    return np.round(q, 1) + 0.0                                # normalise -0.0 -> 0.0
 
 
 def _axis_arrow(origin, vec, color=GREY_B):
