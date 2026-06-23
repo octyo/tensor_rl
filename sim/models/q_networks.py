@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from .tensor_layers import CPLinear, TuckerLinear, TTLinear
+from .tensor_layers import (CPLinear, TuckerLinear, TTLinear, MPSLinear,
+                            TTEmbedding, CPEmbedding, TuckerEmbedding)
 
 
 def parse_tensorize_layers(spec: str, n_layers: int) -> set:
@@ -30,11 +31,13 @@ def parse_tensorize_layers(spec: str, n_layers: int) -> set:
 
 class QNetwork(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden_sizes=(128, 128),
-                 network_type="standard", rank=4, tensorize_layers="all"):
+                 network_type="standard", rank=4, tensorize_layers="all",
+                 tt_dims=None):
         super().__init__()
         self.network_type = network_type
+        self.action_dim = action_dim
+        self._tt_dims = tt_dims
 
-        # Total layers = one per hidden size + one output
         n_layers = len(hidden_sizes) + 1
         self._tz = parse_tensorize_layers(str(tensorize_layers), n_layers)
 
@@ -59,6 +62,8 @@ class QNetwork(nn.Module):
             return TuckerLinear(in_dim, out_dim, ranks=(min(rank, out_dim), min(rank, in_dim)))
         elif net_type == "tt":
             return TTLinear(in_dim, out_dim, rank=rank)
+        elif net_type == "mps":
+            return MPSLinear(in_dim, out_dim, rank=rank, tt_dims=self._tt_dims)
         else:
             raise ValueError(f"Unknown network type: {net_type}")
 
@@ -75,12 +80,13 @@ class DuelingQNetwork(nn.Module):
     """
 
     def __init__(self, state_dim: int, action_dim: int, hidden_sizes=(128, 128),
-                 network_type="standard", rank=4, tensorize_layers="all"):
+                 network_type="standard", rank=4, tensorize_layers="all",
+                 tt_dims=None):
         super().__init__()
         self.network_type = network_type
         self.action_dim = action_dim
+        self._tt_dims = tt_dims
 
-        # Dueling: only hidden trunk layers are tensorizable (heads are always Linear)
         n_trunk_layers = len(hidden_sizes)
         self._tz = parse_tensorize_layers(str(tensorize_layers), n_trunk_layers)
 
@@ -104,6 +110,8 @@ class DuelingQNetwork(nn.Module):
             return TuckerLinear(in_dim, out_dim, ranks=(min(rank, out_dim), min(rank, in_dim)))
         elif net_type == "tt":
             return TTLinear(in_dim, out_dim, rank=rank)
+        elif net_type == "mps":
+            return MPSLinear(in_dim, out_dim, rank=rank, tt_dims=self._tt_dims)
         else:
             raise ValueError(f"Unknown network type: {net_type}")
 
@@ -112,3 +120,50 @@ class DuelingQNetwork(nn.Module):
         value = self.value_head(features)
         advantage = self.advantage_head(features)
         return value + advantage - advantage.mean(dim=1, keepdim=True)
+
+
+class StructuredQNetwork(nn.Module):
+    """Q-network with a genuine tensor-network first layer that preserves spatial structure.
+
+    The input is kept as (batch, d1, d2, ..., dN) — e.g. (batch, 7, 7, 3) for MiniGrid.
+    A TTEmbedding or CPEmbedding contracts over each mode independently, producing
+    (batch, hidden_size). This is the genuine TN claim: spatial axes are treated as
+    separate tensor modes, not flattened into an undifferentiated vector.
+
+    Architecture:
+        (batch, d1, d2, d3)
+          → TTEmbedding / CPEmbedding  → (batch, hidden_size)   [structured TN layer]
+          → ReLU
+          → Linear(hidden_size, hidden_size)                     [standard hidden]
+          → ReLU
+          → Linear(hidden_size, action_dim)                      [output head]
+
+    Only the first layer uses tensor structure. The rest is standard — we are testing
+    whether structured input encoding alone changes sample/parameter efficiency.
+    """
+
+    def __init__(self, mode_dims: tuple, action_dim: int, hidden_size: int = 128,
+                 embedding_type: str = "tt", rank: int = 4):
+        super().__init__()
+        self.mode_dims = tuple(mode_dims)
+        self.action_dim = action_dim
+        self.embedding_type = embedding_type
+
+        if embedding_type == "tt":
+            self.embedding = TTEmbedding(mode_dims, out_features=hidden_size, rank=rank)
+        elif embedding_type == "cp":
+            self.embedding = CPEmbedding(mode_dims, out_features=hidden_size, rank=rank)
+        elif embedding_type == "tucker":
+            self.embedding = TuckerEmbedding(mode_dims, out_features=hidden_size, ranks=rank)
+        else:
+            raise ValueError(f"embedding_type must be 'tt', 'cp', or 'tucker', got '{embedding_type}'")
+
+        self.hidden = nn.Linear(hidden_size, hidden_size)
+        self.output_head = nn.Linear(hidden_size, action_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Handles both (d1,d2,d3) single-step and (batch,d1,d2,d3) batch inputs.
+        # TTEmbedding / CPEmbedding internally unsqueeze when no batch dim is present.
+        h = torch.relu(self.embedding(x))
+        h = torch.relu(self.hidden(h))
+        return self.output_head(h)

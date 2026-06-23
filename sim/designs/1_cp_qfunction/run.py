@@ -1,0 +1,46 @@
+"""Design 1: CP Q-Function — tensorized value function, no neural network."""
+
+import sys, os
+
+DESIGN_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(DESIGN_DIR, '..', '..'))
+sys.path.insert(0, DESIGN_DIR)
+
+from model import CPQFunction
+from designs.shared.config import ENVS
+from designs.shared.training import run_design, train_structured, load_baseline_data
+from designs.shared.plotting import generate_design_figures
+
+RANKS = [2, 4, 8, 16, 32]
+
+
+def main():
+    from envs.env_utils import make_env_structured
+    env, mode_dims = make_env_structured(ENVS[0])
+    action_dim = env.action_space.n
+    env.close()
+
+    configs = []
+    for r in RANKS:
+        def factory(md, _r=r):
+            return CPQFunction(md, action_dim, rank=_r)
+        configs.append((f'cp_r{r}', factory))
+
+    results = run_design(configs, train_structured, DESIGN_DIR,
+                         'Design 1: CP Q-Function (Tensorized Value Function)')
+
+    generate_design_figures(results, DESIGN_DIR, baseline_loader=load_baseline_data)
+
+    lines = ['Design 1: CP Q-Function', '=' * 60, '']
+    for env_id, env_results in results.items():
+        for label, agg in env_results.items():
+            lines.append(f"{env_id}  {label}  params={agg['n_params']}  "
+                         f"solve={agg['solve_mean']:.0%}  reward={agg['reward_mean']:.3f}")
+    lines.append('')
+    with open(os.path.join(DESIGN_DIR, 'output.txt'), 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+    print(f"[Saved → {os.path.join(DESIGN_DIR, 'output.txt')}]")
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,22 @@
+aCase 6: MPS / True TT Layers  (env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44])
+env=MiniGrid-Empty-5x5-v0
+
+Config      Params    vs_std    Solve%         Reward           
+----------------------------------------------------------------------------
+standard    36359     1.00      98% +/- 2%     0.861 +/- 0.015  
+cp_r1       929       0.026     9% +/- 3%      0.085 +/- 0.035  
+mps_r1      505       0.014     49% +/- 22%    0.430 +/- 0.199  
+cp_r2       1595      0.044     9% +/- 5%      0.097 +/- 0.039  
+mps_r2      891       0.025     86% +/- 11%    0.766 +/- 0.076  
+cp_r4       2927      0.081     38% +/- 17%    0.334 +/- 0.129  
+mps_r4      2095      0.058     87% +/- 9%     0.765 +/- 0.078  
+cp_r8       5591      0.154     67% +/- 25%    0.595 +/- 0.212  
+mps_r8      6231      0.171     95% +/- 3%     0.832 +/- 0.044  
+cp_r16      10919     0.300     93% +/- 5%     0.825 +/- 0.056  
+mps_r16     21415     0.589     90% +/- 6%     0.765 +/- 0.046  
+----------------------------------------------------------------------------
+
+Standard baseline: 36359 params
+env=MiniGrid-Empty-5x5-v0, episodes=100, seeds=[42, 43, 44], algo=double_dqn
+MPSLinear: N-core TT with bond-dim=rank, auto-factored weight shapes
+Total runtime: 45.5 min

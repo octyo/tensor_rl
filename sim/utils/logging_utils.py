@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import time
 
+# Absolute path to sim/data/, regardless of the working directory at runtime
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+
 
 def calculate_bitsize(model: nn.Module):
     """Calculates number of parameters and estimated size in bytes."""
@@ -62,7 +65,7 @@ class Logger:
             wandb.log({k: v for k, v in stat.items() if v is not None})
 
     def finish(self):
-        save_metrics(self.run_name, self.metrics, directory="sim/data")
+        save_metrics(self.run_name, self.metrics, directory=_DATA_DIR)
         if self.use_wandb:
             import wandb
             wandb.finish()

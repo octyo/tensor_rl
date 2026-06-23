@@ -1,0 +1,40 @@
+Design 3: Input Space Reduction
+============================================================
+
+MiniGrid-Empty-5x5-v0  tt_r2  params=18353  solve=99%  reward=0.877
+MiniGrid-Empty-5x5-v0  tt_r4  params=19219  solve=95%  reward=0.844
+MiniGrid-Empty-5x5-v0  tt_r8  params=21119  solve=98%  reward=0.860
+MiniGrid-Empty-5x5-v0  tt_r16  params=25591  solve=97%  reward=0.838
+MiniGrid-Empty-5x5-v0  cp_r2  params=17833  solve=97%  reward=0.864
+MiniGrid-Empty-5x5-v0  cp_r4  params=18123  solve=96%  reward=0.842
+MiniGrid-Empty-5x5-v0  cp_r8  params=18703  solve=95%  reward=0.817
+MiniGrid-Empty-5x5-v0  cp_r16  params=19863  solve=97%  reward=0.856
+MiniGrid-Empty-5x5-v0  tucker_r2  params=18609  solve=81%  reward=0.721
+MiniGrid-Empty-5x5-v0  tucker_r4  params=25867  solve=97%  reward=0.846
+MiniGrid-Empty-5x5-v0  tucker_r8  params=83727  solve=80%  reward=0.704
+MiniGrid-Empty-5x5-v0  tucker_r16  params=546199  solve=97%  reward=0.833
+MiniGrid-DoorKey-5x5-v0  tt_r2  params=18353  solve=0%  reward=0.007
+MiniGrid-DoorKey-5x5-v0  tt_r4  params=19219  solve=26%  reward=0.242
+MiniGrid-DoorKey-5x5-v0  tt_r8  params=21119  solve=17%  reward=0.156
+MiniGrid-DoorKey-5x5-v0  tt_r16  params=25591  solve=29%  reward=0.270
+MiniGrid-DoorKey-5x5-v0  cp_r2  params=17833  solve=0%  reward=0.008
+MiniGrid-DoorKey-5x5-v0  cp_r4  params=18123  solve=1%  reward=0.013
+MiniGrid-DoorKey-5x5-v0  cp_r8  params=18703  solve=30%  reward=0.265
+MiniGrid-DoorKey-5x5-v0  cp_r16  params=19863  solve=21%  reward=0.201
+MiniGrid-DoorKey-5x5-v0  tucker_r2  params=18609  solve=1%  reward=0.006
+MiniGrid-DoorKey-5x5-v0  tucker_r4  params=25867  solve=2%  reward=0.021
+MiniGrid-DoorKey-5x5-v0  tucker_r8  params=83727  solve=15%  reward=0.127
+MiniGrid-DoorKey-5x5-v0  tucker_r16  params=546199  solve=2%  reward=0.026
+MiniGrid-DistShift1-v0  tt_r2  params=18353  solve=20%  reward=0.182
+MiniGrid-DistShift1-v0  tt_r4  params=19219  solve=5%  reward=0.057
+MiniGrid-DistShift1-v0  tt_r8  params=21119  solve=53%  reward=0.478
+MiniGrid-DistShift1-v0  tt_r16  params=25591  solve=78%  reward=0.694
+MiniGrid-DistShift1-v0  cp_r2  params=17833  solve=18%  reward=0.163
+MiniGrid-DistShift1-v0  cp_r4  params=18123  solve=40%  reward=0.356
+MiniGrid-DistShift1-v0  cp_r8  params=18703  solve=40%  reward=0.359
+MiniGrid-DistShift1-v0  cp_r16  params=19863  solve=20%  reward=0.187
+MiniGrid-DistShift1-v0  tucker_r2  params=18609  solve=20%  reward=0.178
+MiniGrid-DistShift1-v0  tucker_r4  params=25867  solve=36%  reward=0.320
+MiniGrid-DistShift1-v0  tucker_r8  params=83727  solve=38%  reward=0.345
+MiniGrid-DistShift1-v0  tucker_r16  params=546199  solve=45%  reward=0.415
+

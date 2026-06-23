@@ -1,0 +1,74 @@
+#!/bin/bash
+### DTU HPC (LSF) job array: CP(target-net)-vs-tabular sweep, WITH value error.
+### One array task per (size, layout, spawn) -> 60 tasks (5 layouts x 6 sizes x 2).
+### Submit with:   bsub < sim/hpc/run_sweep_verr.lsf
+###
+### Same battery as run_sweep.lsf but runs obstacle_lab_verr.py, which also logs
+### the value error ||Q_hat - Q*|| / ||Q*|| at every checkpoint -> a 3rd curves
+### panel + final_verr in metrics.json. Layouts: empty narrow chicane islands swirl
+### (swirl included at every size). Episodes scale ~25*S^2.
+
+#BSUB -J minigrid_verr[1-60]
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -M 4GB
+#BSUB -W 6:00
+#BSUB -o sim/hpc/logs/%J_%I.out
+#BSUB -e sim/hpc/logs/%J_%I.err
+
+set -euo pipefail
+
+# Repo root: start at the submission dir and walk up to find the runner.
+if [ -z "${REPO:-}" ]; then
+    REPO="${LS_SUBCWD:-$PWD}"
+    while [ "$REPO" != "/" ] && [ ! -f "$REPO/sim/obstacle_lab_verr.py" ]; do
+        REPO="$(dirname "$REPO")"
+    done
+fi
+if [ ! -f "$REPO/sim/obstacle_lab_verr.py" ]; then
+    echo "ERROR: could not locate repo root (no sim/obstacle_lab_verr.py under $REPO)." >&2
+    echo "       export REPO=/path/to/tensor_rl before submitting." >&2
+    exit 1
+fi
+mkdir -p "$REPO/sim/hpc/logs"
+
+# ---------------------------------------------------------------------------
+# Environment. EDIT for your account: needs python3 + numpy/gymnasium/minigrid/
+# matplotlib, and ffmpeg on PATH for videos (else add --no-videos below).
+# ---------------------------------------------------------------------------
+module load python3/3.11.9
+# module load ffmpeg/6.1
+# source $HOME/tensor_rl/code/venv/bin/activate
+PYTHON=${PYTHON:-python3}
+
+# single-threaded per task; parallelism comes from the job array
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+
+# Map $LSB_JOBINDEX -> one (size, layout, spawn, episodes, ...) config.
+read SIZE LAYOUT SPAWN EPISODES MAXSTEPS EVAL SNAP < <($PYTHON - "$LSB_JOBINDEX" <<'PY'
+import sys
+idx = int(sys.argv[1])
+SIZES = [8, 12, 16, 24, 32, 48]
+LAYOUTS = ["empty", "narrow", "chicane", "islands", "swirl"]   # swirl at every size
+cfgs = []
+for s in SIZES:
+    for lay in LAYOUTS:
+        for sp in ["random", "fixed"]:
+            E = max(2000, round(25 * s * s / 1000) * 1000)
+            cfgs.append((s, lay, sp, E, 12 * s, max(100, E // 50), max(50, E // 200)))
+s, lay, sp, E, ms, ev, sn = cfgs[idx - 1]
+print(s, lay, sp, E, ms, ev, sn)
+PY
+)
+
+echo "[task $LSB_JOBINDEX] size=$SIZE layout=$LAYOUT spawn=$SPAWN episodes=$EPISODES (value-error run)"
+
+cd "$REPO/sim"
+
+$PYTHON obstacle_lab_verr.py \
+    --layout "$LAYOUT" --size "$SIZE" --spawn "$SPAWN" \
+    --episodes "$EPISODES" --max-steps "$MAXSTEPS" \
+    --eval-every "$EVAL" --snap-every "$SNAP"
+    # add --no-videos if ffmpeg is not available on the cluster
